@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "585362276918",
+    "project_id": "medlinkapp-d7030",
+    "storage_bucket": "medlinkapp-d7030.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:585362276918:android:562991009e4b5c905f4e97",
+        "android_client_info": {
+          "package_name": "com.example.app_roffo"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "585362276918-i5vspldvdf9vm4emruvovghjt4ecd67e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwW0eyZkvIMcAOMiTRFqPtcIA6PrjOPX4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "585362276918-i5vspldvdf9vm4emruvovghjt4ecd67e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "585362276918-hudnfdpp4rf239tmu56vldm4kbq3j3f4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.appRoffo"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,38 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "medlinkapp-d7030",
+          "appId": "1:585362276918:android:562991009e4b5c905f4e97",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "medlinkapp-d7030",
+          "configurations": {
+            "android": "1:585362276918:android:562991009e4b5c905f4e97",
+            "ios": "1:585362276918:ios:5ed322c825d7e2165f4e97",
+            "web": "1:585362276918:web:e4a47a81c8de5e015f4e97",
+            "windows": "1:585362276918:web:16feda4c99cb9b7c5f4e97"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
