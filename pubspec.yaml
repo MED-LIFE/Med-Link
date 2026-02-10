@@ -1,5 +1,5 @@
-name: app_roffo
-description: "A new Flutter project."
+name: zanoo
+description: "Aplicación ZANOO."
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -15,16 +15,44 @@ dependencies:
   firebase_core: ^2.25.4
   firebase_auth: ^4.17.5
   cloud_firestore: ^4.13.6
+  firebase_storage: ^11.6.0
   google_sign_in: ^6.2.5
 
   # --- Paquetes extra para funcionalidades comunes
   intl: ^0.19.0
   image_picker: ^1.0.7
+  table_calendar: ^3.1.0
+  file_picker: ^8.0.7
+  csv: ^6.0.0
+  mobile_scanner: ^3.5.5
+  google_mlkit_text_recognition: ^0.13.0
+  local_auth: ^2.1.6
+  pdf: ^3.10.4
+  printing: ^5.11.0
+  firebase_messaging: ^14.6.5
+  url_launcher: ^6.2.5
+  fl_chart: ^0.66.0
+  provider: ^6.0.5
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.10
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/icon_z.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/icon_z.png"
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: "assets/images/logo_zanoo_colorful.png"
+  android: true
+  ios: true
 
 flutter:
   uses-material-design: true
@@ -33,5 +61,7 @@ flutter:
   assets:
     - assets/logo_hospi.jpg
     - assets/banner_home.png
+    - assets/banner_admin.png
     - assets/google_logo.png
-    - assets/images/ilustracion_historia_clinica.png
+    - assets/images/
+    - assets/images/doctors/

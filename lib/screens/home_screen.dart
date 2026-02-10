@@ -1,14 +1,29 @@
 import 'package:flutter/material.dart';
+import '../services/session_manager.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+import 'dart:ui'; // For BackdropFilter
+import '../services/push_notification_service.dart';
+import '../repositories/medico_repository.dart';
+import '../models/agenda_item_model.dart';
 
-// Imports corregidos
 import 'historia_clinica_screen.dart';
 import 'completar_perfil_screen.dart';
-import 'estudios_screen.dart';
 import 'mi_perfil_screen.dart';
 import 'sacar_turno_screen.dart';
+import 'mis_medicos_screen.dart'; 
+import 'mis_recetas_screen.dart'; 
+import 'estudios_screen.dart';
+import 'farmacias_screen.dart';
+import 'mis_turnos_screen.dart';
+import '../widgets/patient/home_widgets.dart';
+import '../widgets/main_drawer.dart';
+import '../widgets/common/bouncing_card.dart';
+import 'detalle_estudio_screen.dart';
+
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,18 +32,12 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  final List<_DashboardSection> _sections = [
-    _DashboardSection(Icons.folder_shared, 'Historia clínica'),
-    _DashboardSection(Icons.event_available, 'Sacar turno'),
-    _DashboardSection(Icons.science, 'Ver estudios'),
-    _DashboardSection(Icons.person, 'Editar perfil'),
-  ];
-
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _query = '';
   bool _isLoading = false;
   String _loadingMessage = '';
-  late AnimationController _fadeController;
-  late AnimationController _slideController;
+  
+  late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
@@ -37,110 +46,107 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     super.initState();
     _setupAnimations();
     _crearDatosMockSiNoExisten();
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      precacheImage(const AssetImage('assets/images/banner_patient_welcome.png'), context);
+      PushNotificationService().initialize(context);
+    });
   }
 
   void _setupAnimations() {
-    _fadeController = AnimationController(
+    _controller = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-    _slideController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
+    
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
     );
     
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeInOut,
-    ));
-    
     _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
+      begin: const Offset(0, 0.1),
       end: Offset.zero,
     ).animate(CurvedAnimation(
-      parent: _slideController,
-      curve: Curves.easeOutCubic,
+      parent: _controller,
+      curve: Curves.easeOutQuad,
     ));
 
-    // Iniciar animaciones
-    _fadeController.forward();
-    _slideController.forward();
+    _controller.forward();
   }
 
   @override
   void dispose() {
-    _fadeController.dispose();
-    _slideController.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
-  // Crear datos mock con loading state
+  void _handleSearch(String query) {
+    if (query.isEmpty) return;
+    
+    final lowerQuery = query.toLowerCase();
+    
+    if (lowerQuery.contains("turno")) {
+       Navigator.push(context, MaterialPageRoute(builder: (_) => const SacarTurnoScreen()));
+    } else if (lowerQuery.contains("clinica") || lowerQuery.contains("historia") || lowerQuery.contains("paciente")) {
+       Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoriaClinicaScreen()));
+    } else if (lowerQuery.contains("estudio") || lowerQuery.contains("laboratorio") || lowerQuery.contains("analisis")) {
+       Navigator.push(context, MaterialPageRoute(builder: (_) => const EstudiosScreen()));
+    } else if (lowerQuery.contains("farmacia") || lowerQuery.contains("medicamento") || lowerQuery.contains("remedio")) {
+       Navigator.push(context, MaterialPageRoute(builder: (_) => const FarmaciasScreen()));
+    } else if (lowerQuery.contains("receta")) {
+       Navigator.push(context, MaterialPageRoute(builder: (_) => const MisRecetasScreen()));  
+    } else if (lowerQuery.contains("medico") || lowerQuery.contains("doctor") || lowerQuery.contains("profesional")) {
+       Navigator.push(context, MaterialPageRoute(builder: (_) => const MisMedicosScreen()));
+    } else {
+       ScaffoldMessenger.of(context).showSnackBar(
+         SnackBar(
+           content: Text("No se encontraron resultados para '$query'."),
+           backgroundColor: Colors.grey[800],
+           behavior: SnackBarBehavior.floating,
+         )
+       );
+    }
+    
+    FocusScope.of(context).unfocus(); // Close keyboard
+  }
+
   void _crearDatosMockSiNoExisten() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      setState(() {
-        _isLoading = true;
-        _loadingMessage = 'Verificando datos del paciente...';
-      });
-
       try {
-        final doc = await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get();
+        final doc = await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get()
+            .timeout(const Duration(seconds: 5));
         if (!doc.exists) {
-          setState(() {
-            _loadingMessage = 'Configurando historia clínica...';
-          });
-          
-          await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).set({
-            'dni': '12345678',
-            'edad': '35',
-            'centro': 'Roffo',
-            'proxima_cita': 'Hoy 10:00 - Dra. Pérez',
-            'fecha_actualizacion': '25/10/2025',
-            'resumen': 'Paciente estable bajo seguimiento regular',
-            'diagnostico': 'Hipertensión arterial esencial',
-            'medicamentos': 'Losartán 50mg - 1 comp cada 12hs',
-            'estado_salud': 'Estable',
-            'alertas_medicas': 'Ninguna',
-            'ultimo_control': '15/10/2025'
-          });
+           await FirebaseFirestore.instance.collection('usuarios').doc(user.uid).set({
+             'dni': '12345678',
+             'centro': 'ZANOO',
+             'creado': DateTime.now().toIso8601String(),
+           });
         }
       } catch (e) {
-        setState(() {
-          _loadingMessage = 'Error al cargar datos. Reintentando...';
-        });
-      } finally {
-        setState(() {
-          _isLoading = false;
-          _loadingMessage = '';
-        });
+        // Silent
       }
     }
   }
 
-  // Feedback háptico para interacciones importantes
   void _hapticFeedback() {
     HapticFeedback.lightImpact();
   }
 
+  void _showToast(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      )
+    );
+  }
+
   void _navigateWithAnimation(Widget destination, String heroTag) async {
     _hapticFeedback();
-    
-    setState(() {
-      _isLoading = true;
-      _loadingMessage = 'Cargando...';
-    });
-
-    // Simular un pequeño delay para mostrar el loading
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    setState(() {
-      _isLoading = false;
-      _loadingMessage = '';
-    });
-
     if (mounted) {
       Navigator.push(
         context,
@@ -164,875 +170,760 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
 
+  // --- RESULTS DIALOG (Enriched) ---
+  void _showResultsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          constraints: const BoxConstraints(maxHeight: 600),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Resultados", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF083866))),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    onPressed: () => Navigator.pop(context),
+                  )
+                ],
+              ),
+              const SizedBox(height: 20),
+              
+              // Featured Result (The one clicked)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE3F2FD),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF2376F6).withOpacity(0.1))
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.analytics_outlined, size: 28, color: Color(0xFF1565C0)),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                           Text("Hemograma Completo", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF083866), fontSize: 16)),
+                           Text("15 Ene 2024 • Dr. Rossi", style: TextStyle(fontSize: 13, color: Color(0xFF1565C0))),
+                        ],
+                      ),
+                    )
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 24),
+              const Text("Historial Reciente", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 12),
+              
+              // List of other studies
+              Expanded(
+                child: ListView(
+                  shrinkWrap: true,
+                  physics: const BouncingScrollPhysics(),
+                  children: [
+                    _buildResultItem("Ecografía Abdominal", "10 Dic 2023", Icons.image_search_rounded),
+                    _buildResultItem("Perfil Lipídico", "28 Nov 2023", Icons.water_drop_rounded),
+                    _buildResultItem("Resonancia Magnética", "15 Oct 2023", Icons.camera_alt_rounded),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.download_rounded),
+                  label: const Text("Descargar PDF"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2376F6),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
+                  ),
+                ),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultItem(String title, String date, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: const Color(0xFFF5F9FF), borderRadius: BorderRadius.circular(14)),
+          child: Icon(icon, color: const Color(0xFF2376F6).withOpacity(0.6), size: 22),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF0D1C2E))),
+        subtitle: Text(date, style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+        trailing: Icon(Icons.chevron_right_rounded, size: 20, color: Colors.grey[300]),
+        onTap: () {
+          Navigator.pop(context); // Close dialog
+          // Mock Data for Detail
+          final mockEstudio = {
+             "tipo": title,
+             "fecha": date,
+             "profesional": "Dr. Generico",
+             "estado": "Disponible",
+             "observaciones": "Estudio realizado sin complicaciones. Valores dentro de rango."
+          };
+          _navigateWithAnimation(DetalleEstudioScreen(estudio: mockEstudio), 'estudio_detail');
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final double bannerHeight = screenWidth * (100 / 320);
-    final filtered = _sections
-        .where((sec) => sec.label.toLowerCase().contains(_query.toLowerCase()))
-        .toList();
+    final now = DateTime.now();
+    String fullDate = DateFormat('d, MMMM', 'es').format(now).toUpperCase();
 
-    return Scaffold(
-      drawer: _MainDrawer(onLogout: () async {
-        _hapticFeedback();
-        setState(() {
-          _isLoading = true;
-          _loadingMessage = 'Cerrando sesión...';
-        });
-        
-        await Future.delayed(const Duration(milliseconds: 1000));
-        await FirebaseAuth.instance.signOut();
-        
-        if (mounted) {
-          Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
-        }
-      }),
-      backgroundColor: const Color(0xFFFEF9F1),
-      body: Stack(
-        children: [
-          SafeArea(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SlideTransition(
-                position: _slideAnimation,
-                child: Column(
-                  children: [
-                    // Header más compacto
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Color(0xFF083866), Color(0xFF2376F6)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.only(
-                          bottomLeft: Radius.circular(22),
-                          bottomRight: Radius.circular(22),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Color(0xFF2376F6),
-                            blurRadius: 15,
-                            offset: Offset(0, 8),
-                            spreadRadius: -5,
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Builder(
-                            builder: (context) => Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: IconButton(
-                                icon: const Icon(Icons.menu, color: Color(0xFF2376F6), size: 22),
+    // SYSTEM UI: Force Light Icons for Dark Header
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light, 
+      ),
+      child: Scaffold(
+        key: _scaffoldKey, 
+        drawer: MainDrawer(
+          role: UserRole.patient,
+          onLogout: () async {
+            _hapticFeedback();
+            setState(() {
+              _isLoading = true;
+              _loadingMessage = 'Cerrando sesión...';
+            });
+            await Future.delayed(const Duration(milliseconds: 1000));
+            await FirebaseAuth.instance.signOut();
+            if (mounted) {
+              Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+            }
+          }
+        ),
+        backgroundColor: const Color(0xFFFEF9F1), 
+        body: Stack(
+          children: [
+            Column(
+              children: [
+                 // HEADER (Standardized: Radius 16, Shadow Medico)
+                 Container(
+                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8), // PLATINUM: 24px Padding, 8px Vertical
+                   decoration: const BoxDecoration(
+                     gradient: LinearGradient(
+                       colors: [Color(0xFF083866), Color(0xFF2376F6)],
+                       begin: Alignment.topLeft, end: Alignment.bottomRight
+                     ),
+                     borderRadius: BorderRadius.only(bottomLeft: Radius.circular(16), bottomRight: Radius.circular(16)),
+                     boxShadow: [BoxShadow(color: Color(0xFF2376F6), blurRadius: 16, offset: Offset(0, 8), spreadRadius: -5)], // 15->16 (8pt grid)
+                   ),
+                   child: SafeArea( // Keep SafeArea for Header content
+                     bottom: false,
+                     child: Row(
+                       children: [
+                          Container(
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                            child: BouncingCard( // PLATINUM: Bounce
+                              onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                              child: Padding(
                                 padding: const EdgeInsets.all(8),
-                                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                                onPressed: () {
-                                  _hapticFeedback();
-                                  Scaffold.of(context).openDrawer();
-                                },
+                                child: const Icon(Icons.menu, color: Color(0xFF2376F6), size: 22),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: Image.asset(
-                                'assets/logo_hospi.jpg',
-                                width: 24,
-                                height: 24,
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) => 
-                                  const Icon(Icons.local_hospital, color: Colors.white, size: 24),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          const Expanded(
-                            child: Text(
-                              "ROFFO",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 20,
-                                color: Colors.white,
-                                letterSpacing: 1.2,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.15),
-                              shape: BoxShape.circle,
-                            ),
-                            child: user != null && user.photoURL != null
-                              ? CircleAvatar(
-                                  backgroundImage: NetworkImage(user.photoURL!),
-                                  radius: 16,
-                                )
-                              : const CircleAvatar(
-                                  backgroundColor: Colors.white,
-                                  radius: 16,
-                                  child: Icon(Icons.person, color: Color(0xFF2376F6), size: 18),
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
+                          const SizedBox(width: 12), // 10->12
+                          Image.asset('assets/images/logo_zanoo_white.png', height: 22, fit: BoxFit.contain), 
+                          const Spacer(),
+                          const SizedBox(width: 12), // 10->12
+                          BouncingCard(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const MiPerfilScreen()),
+                              );
+                            },
+                            child: Container(
+                               padding: const EdgeInsets.all(2),
+                               decoration: BoxDecoration(
+                                 color: Colors.white.withOpacity(0.2),
+                                 shape: BoxShape.circle,
+                               ),
+                                child: ListenableBuilder(
+                                  listenable: SessionManager(),
+                                  builder: (context, _) {
+                                    final sessionAvatar = SessionManager().avatarPath;
+                                    // Logic: 1. Session Avatar -> 2. Firebase User Photo -> 3. Default Icon
+                                    
+                                    ImageProvider? bgImage;
+                                    if (sessionAvatar != null && sessionAvatar.isNotEmpty) {
+                                       if (sessionAvatar.contains("assets/")) {
+                                         bgImage = AssetImage(sessionAvatar);
+                                       } else {
+                                         // Web/Local File
+                                          bgImage = NetworkImage(sessionAvatar); // For web simplicity, normally FileImage check
+                                       }
+                                    } else if (user != null && user.photoURL != null) {
+                                      bgImage = NetworkImage(user.photoURL!);
+                                    }
 
-                    // User info con avatar corregido
-                    if (user != null)
-                      Container(
-                        margin: const EdgeInsets.fromLTRB(19, 10, 19, 8),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: const Color(0xFF2376F6).withOpacity(0.08),
-                            width: 1,
+                                    return CircleAvatar(
+                                      radius: 16,
+                                      backgroundColor: Colors.white,
+                                      backgroundImage: bgImage,
+                                      child: bgImage == null
+                                          ? const Icon(Icons.person, color: Color(0xFF2376F6), size: 18)
+                                          : null,
+                                    );
+                                  }
+                                ),
+                             ),
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 46,
-                              height: 46,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2376F6).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: const Color(0xFF2376F6).withOpacity(0.2),
-                                  width: 1,
-                                ),
-                              ),
-                              child: user.photoURL != null
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(13),
-                                    child: Image.network(
-                                      user.photoURL!,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return const Icon(Icons.person, color: Color(0xFF2376F6), size: 22);
-                                      },
-                                    ),
-                                  )
-                                : const Icon(Icons.person, color: Color(0xFF2376F6), size: 22),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    user.displayName ?? "Usuario",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 15,
-                                      color: Color(0xFF083866),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    user.email ?? "",
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0EDB92).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: const Color(0xFF0EDB92).withOpacity(0.2),
-                                  width: 1,
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.circle, color: Color(0xFF0EDB92), size: 8),
-                                  SizedBox(width: 5),
-                                  Text(
-                                    'Activo',
-                                    style: TextStyle(
-                                      color: Color(0xFF0EDB92),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                       ],
+                     ),
+                   ),
+                 ),
 
-                    // Banner con Anto
-                    Stack(
-                      children: [
-                        Container(
-                          width: double.infinity,
-                          height: bannerHeight,
-                          margin: const EdgeInsets.only(top: 6, left: 14, right: 14),
-                          decoration: const BoxDecoration(
-                            borderRadius: BorderRadius.only(
-                              bottomLeft: Radius.circular(32),
-                              bottomRight: Radius.circular(32),
-                            ),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: Image.asset(
-                            'assets/banner_home.png',
-                            fit: BoxFit.cover,
-                            alignment: Alignment.topCenter,
-                            errorBuilder: (context, error, stackTrace) => 
-                              Container(
-                                color: const Color(0xFFE8F4FD),
-                                child: const Center(
-                                  child: Icon(Icons.person_outline, size: 80, color: Colors.grey),
-                                ),
-                              ),
-                          ),
-                        ),
-                        Positioned(
-                          left: screenWidth * 0.08,
-                          top: bannerHeight * 0.23,
-                          child: Container(
-                            constraints: BoxConstraints(maxWidth: screenWidth * 0.62),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF7E8FF),
-                              borderRadius: BorderRadius.circular(17),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Colors.black12,
-                                  blurRadius: 4,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Text(
-                              "¡Hola! Soy Anto, tu\nasistente personal en la app.",
-                              style: TextStyle(
-                                fontSize: MediaQuery.of(context).textScaleFactor * 13.7,
-                                color: const Color(0xFF46336C),
-                                fontWeight: FontWeight.w500,
-                                height: 1.22,
-                              ),
-                            ),
-                          ),
+                 Expanded(
+                   child: FadeTransition(
+                     opacity: _fadeAnimation,
+                     child: SlideTransition(
+                       position: _slideAnimation,
+                       child: ListView(
+                         physics: const BouncingScrollPhysics(),
+                         padding: EdgeInsets.zero,
+                         children: [
+                           
+                           // BANNER 
+                           SizedBox(
+                             width: double.infinity,
+                             height: 232, // Adjusted to 8pt grid (230->232)
+                             child: Stack(
+                               clipBehavior: Clip.none,
+                               children: [
+                                  // Background
+                                  Positioned.fill(
+                                    child: Container(
+                                      color: const Color(0xFFFEF9F1), 
+                                    ),
+                                  ),
+                                  
+                                  // ILLUSTRATION
+                                  Positioned(
+                                    right: -20, 
+                                    bottom: -30, // Adjusted to pull up slightly (was -72)
+                                    height: 280, // Reduced from 330 to match StandardPageHeader fix
+                                    child: Image.asset(
+                                      'assets/images/banner_patient_welcome.png', 
+                                      fit: BoxFit.contain, 
+                                    ),
+                                  ),
+                                    
+                                  // TEXT CONTENT (PLATINUM: 24/32 Padding)
+                                  Positioned.fill(
+                                    child: Padding(
+                                      padding: const EdgeInsets.fromLTRB(32, 48, 24, 16), // 28->32, 45->48, 20->24, 12->16 (All 8pt)
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "Hola, ${user?.displayName?.split(' ').first ?? 'Laura'}", 
+                                            style: const TextStyle(
+                                              fontSize: 26, 
+                                              fontWeight: FontWeight.bold, 
+                                              color: Color(0xFF083866),
+                                              letterSpacing: -0.5
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          const Text(
+                                            "Centro Médico: Instituto Roffo",
+                                            style: TextStyle(
+                                              fontSize: 14, 
+                                              fontWeight: FontWeight.w600, 
+                                              color: Color(0xFF2376F6)
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            fullDate, 
+                                            style: TextStyle(
+                                              fontSize: 12, 
+                                              fontWeight: FontWeight.bold, 
+                                              color: Colors.grey[600],
+                                              letterSpacing: 0.5
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+
+                                  // FLOATING SEARCH BAR (PLATINUM: 24px Side Margins)
+                                  Positioned(
+                                    bottom: 0, 
+                                    left: 24, // 16->24
+                                    right: 24, // 16->24
+                                    height: 48, // 50->48 (8pt grid)
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(24), // 25->24 (8pt grid)
+                                      child: BackdropFilter(
+                                        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                                        child: Container(
+                                         decoration: BoxDecoration(
+                                           color: Colors.white.withOpacity(0.95),
+                                           borderRadius: BorderRadius.circular(24),
+                                           boxShadow: const [
+                                             BoxShadow(color: Colors.black12, blurRadius: 16, offset: Offset(0, 8)) // 15->16
+                                           ],
+                                           border: Border.all(color: const Color(0xFF2376F6).withOpacity(0.1))
+                                         ),
+                                         child: TextField(
+                                           onChanged: (val) {
+                                             setState(() {
+                                               _query = val;
+                                             });
+                                           },
+                                           decoration: InputDecoration(
+                                             hintText: "¿Qué estás buscando?",
+                                             hintStyle: TextStyle(fontSize: 15, color: Colors.grey[400]),
+                                             prefixIcon: const Icon(Icons.search_rounded, size: 22, color: Color(0xFF2376F6)),
+                                             suffixIcon: Padding(
+                                               padding: const EdgeInsets.all(4.0),
+                                               child: Container(
+                                                 decoration: const BoxDecoration(
+                                                   color: Color(0xFFE3F2FD),
+                                                   shape: BoxShape.circle,
+                                                 ),
+                                                 child: IconButton(
+                                                   icon: const Icon(Icons.arrow_forward_rounded, size: 18, color: Color(0xFF2376F6)),
+                                                   onPressed: () => _handleSearch(_query), 
+                                                   padding: EdgeInsets.zero,
+                                                   constraints: const BoxConstraints(),
+                                                 ),
+                                               ),
+                                             ),
+                                             border: InputBorder.none,
+                                             contentPadding: const EdgeInsets.symmetric(vertical: 12), // 14->12 
+                                           ),
+                                           onSubmitted: _handleSearch,
+                                         ),
+                                        ),
+                                      ), 
+                                    ),
+                                  ),
+                               ],
+                             ),
+                           ),
+
+                           const SizedBox(height: 24), 
+
+                           // MAIN CONTENT (PLATINUM: 24px Padding)
+                           Padding(
+                             padding: const EdgeInsets.symmetric(horizontal: 24), // 16->24
+                             child: Column(
+                               children: [
+                                 // 1. KPI ROW (Standardized)
+                                 Row(
+                                   children: [
+                                     Expanded(
+                                       child: _buildPatientKPI(
+                                         Icons.favorite_rounded, 
+                                         "Médicos Fav.", 
+                                         "3 Médicos", 
+                                         const Color(0xFFE91E63), 
+                                         () => _navigateWithAnimation(const MisMedicosScreen(), 'medicos')
+                                       )
+                                     ),
+                                     const SizedBox(width: 12),
+                                     Expanded(
+                                       child: _buildPatientKPI(
+                                         Icons.medical_services_outlined, 
+                                         "Recetas", 
+                                         "2 Disp.", 
+                                         const Color(0xFF00C853), 
+                                         () => _navigateWithAnimation(const MisRecetasScreen(), 'recetas')
+                                       )
+                                     ),
+                                     const SizedBox(width: 12),
+                                     Expanded(
+                                       child: _buildPatientKPI(
+                                         Icons.science_outlined, 
+                                         "Estudios", 
+                                         "1 Nuevo", 
+                                         const Color(0xFF2376F6), 
+                                         () => _navigateWithAnimation(const EstudiosScreen(), 'estudios')
+                                       )
+                                     ),
+                                   ],
+                                 ),
+
+                                 const SizedBox(height: 24),
+
+                                 // 2. PRÓXIMOS TURNOS SLIDER (Real Data)
+                                 const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(left: 4, bottom: 12),
+                                      child: Text("Próximos Turnos", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF083866))),
+                                    ),
+                                 ),
+                                 StreamBuilder<List<AgendaItem>>(
+                                    stream: MedicoRepository().getMyAppointmentsStream(),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState == ConnectionState.waiting) {
+                                        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                                      }
+                                      
+                                      final turns = snapshot.data ?? [];
+                                      final upcomingTurns = turns.where((t) => t.estado != 'Realizado' && t.estado != 'Cancelado').toList(); 
+
+                                      if (upcomingTurns.isEmpty) {
+                                        return Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(20),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(16),
+                                            border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              Icon(Icons.event_busy_rounded, size: 40, color: Colors.grey[300]),
+                                              const SizedBox(height: 8),
+                                              Text("No tenés turnos próximos", style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                                              TextButton(
+                                                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SacarTurnoScreen())),
+                                                child: const Text("Sacar Turno Nuevo"),
+                                              )
+                                            ],
+                                          ),
+                                        );
+                                      }
+
+                                      return SizedBox(
+                                        height: 110, // Slightly taller
+                                        child: PageView.builder(
+                                          controller: PageController(viewportFraction: 0.9),
+                                          padEnds: false,
+                                          physics: const BouncingScrollPhysics(),
+                                          itemCount: upcomingTurns.length,
+                                          itemBuilder: (context, index) {
+                                            final turn = upcomingTurns[index];
+                                            return Padding(
+                                              padding: const EdgeInsets.only(right: 8),
+                                              child: _buildTurnoCard(
+                                                  "${turn.hora} hs", 
+                                                  turn.doctor, 
+                                                  "Consulta ${turn.specialty}"
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      );
+                                    }
+                                 ),
+                                 
+                                 const SizedBox(height: 24),
+                                 
+                                 // "Accesos" Label
+                                 const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(left: 4, bottom: 12),
+                                      child: Text("Accesos Rápidos", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF083866))),
+                                    ),
+                                 ),
+
+                                 // 3. HORIZONTAL SLIDER (Standard 16px)
+                                 SizedBox(
+                                   height: 136, // 135->136 (8pt)
+                                   child: ListView(
+                                     scrollDirection: Axis.horizontal,
+                                     physics: const BouncingScrollPhysics(),
+                                     clipBehavior: Clip.none,
+                                     padding: const EdgeInsets.only(bottom: 24),
+                                     children: [
+                                       _buildSliderButton(context, Icons.folder_shared_rounded, "Historia", () => _navigateWithAnimation(const HistoriaClinicaScreen(), 'hc')),
+                                       const SizedBox(width: 12),
+                                       _buildSliderButton(context, Icons.calendar_month_rounded, "Turnos", () => _navigateWithAnimation(const SacarTurnoScreen(), 'turnos')),
+                                       const SizedBox(width: 12),
+                                       _buildSliderButton(context, Icons.person_outline_rounded, "Perfil", () => _navigateWithAnimation(const MiPerfilScreen(), 'perfil')),
+                                        const SizedBox(width: 12),
+                                       _buildSliderButton(context, Icons.local_pharmacy_rounded, "Farmacias", () => _navigateWithAnimation(const FarmaciasScreen(), 'farmacias')),
+                                        const SizedBox(width: 12),
+                                       _buildSliderButton(context, Icons.add_location_alt_rounded, "Guardias", () => _showToast("Mapa de Guardias (Próximamente)")),
+                                       const SizedBox(width: 16),
+                                     ],
+                                   ),
+                                 ),
+                                 
+                                 const SizedBox(height: 8), // 10->8
+
+                                 // 4. TECH VISUAL (24px Radius to match Medico Cards)
+                                 const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Padding(
+                                      padding: EdgeInsets.only(left: 4, bottom: 12),
+                                      child: Text("Últimos Resultados", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF083866))),
+                                    ),
+                                 ),
+                                 
+                                 BouncingCard(
+                                   onTap: () {
+                                     _hapticFeedback();
+                                     _showResultsDialog(context);
+                                   },
+                                   child: Container( 
+                                     decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(24),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF90A4AE).withOpacity(0.08), 
+                                            blurRadius: 24,
+                                            offset: const Offset(0, 10),
+                                          ),
+                                        ],
+                                     ),
+                                     child: Padding(
+                                       padding: const EdgeInsets.all(16),
+                                       child: Row(
+                                         children: [
+                                           Container(
+                                             padding: const EdgeInsets.all(12),
+                                             decoration: BoxDecoration(
+                                               color: const Color(0xFFE3F2FD),
+                                               borderRadius: BorderRadius.circular(12),
+                                             ),
+                                             child: const Icon(Icons.description_rounded, color: Color(0xFF1565C0), size: 28),
+                                           ),
+                                           const SizedBox(width: 16),
+                                           Expanded(
+                                             child: Column(
+                                               crossAxisAlignment: CrossAxisAlignment.start,
+                                               children: [
+                                                 const Text("Análisis de Sangre", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF083866))),
+                                                 const SizedBox(height: 4),
+                                                 Row(
+                                                   children: [
+                                                     Icon(Icons.check_circle_rounded, size: 14, color: Colors.green[600]),
+                                                     const SizedBox(width: 4),
+                                                     Text("Disponible • 15 Ene", style: TextStyle(fontSize: 13, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+                                                   ],
+                                                 ),
+                                               ],
+                                             ),
+                                           ),
+                                           Container(
+                                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                             decoration: BoxDecoration(
+                                               color: const Color(0xFF2376F6).withOpacity(0.1),
+                                               borderRadius: BorderRadius.circular(24), // 20->24
+                                             ),
+                                             child: const Text("Ver Online", style: TextStyle(color: Color(0xFF2376F6), fontWeight: FontWeight.bold, fontSize: 13)),
+                                           )
+                                         ],
+                                       ),
+                                     ),
+                                   ),
+                                 ),
+                                 
+                                 const SizedBox(height: 40),
+                               ],
+                             ),
+                           ),
+                         ],
+                       ),
+                     ),
+                   ),
+                 ),
+              ],
+            ),
+            
+            if (_isLoading)
+              Container(
+                color: Colors.black54,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-
-                    // Buscador
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 4),
-                      child: Container(
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: const Color(0xFF2376F6).withOpacity(0.08),
-                            width: 1,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2376F6)),
                         ),
-                        child: TextField(
-                          style: const TextStyle(fontSize: 14),
-                          onChanged: (v) => setState(() => _query = v),
-                          decoration: InputDecoration(
-                            prefixIcon: Container(
-                              width: 40,
-                              height: 40,
-                              padding: const EdgeInsets.all(10),
-                              child: const Icon(Icons.search, color: Color(0xFF2376F6), size: 18),
-                            ),
-                            hintText: 'Buscar',
-                            hintStyle: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[500],
-                            ),
-                            filled: false,
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                        const SizedBox(height: 16),
+                        Text(
+                          _loadingMessage,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF083866),
                           ),
+                          textAlign: TextAlign.center,
                         ),
-                      ),
+                      ],
                     ),
-
-                    // Próximo turno banner - ARREGLADO
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 19),
-                      child: InkWell(
-                        onTap: () {
-                          _hapticFeedback();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const SacarTurnoScreen(),
-                            ),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(18),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(18),
-                          margin: const EdgeInsets.only(bottom: 12, top: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: const Color(0xFF2376F6).withOpacity(0.15),
-                              width: 1.5,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF2376F6).withOpacity(0.1),
-                                blurRadius: 15,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 4,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2376F6),
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Container(
-                                width: 48,
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2376F6).withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: const Color(0xFF2376F6).withOpacity(0.2),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: const Icon(Icons.schedule_rounded, color: Color(0xFF2376F6), size: 24),
-                              ),
-                              const SizedBox(width: 16),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          "Próximo turno",
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF2376F6),
-                                            fontSize: 12,
-                                            letterSpacing: 0.3,
-                                          ),
-                                        ),
-                                        SizedBox(width: 8),
-                                        Icon(Icons.circle, color: Color(0xFF0EDB92), size: 6),
-                                      ],
-                                    ),
-                                    SizedBox(height: 6),
-                                    Text(
-                                      "Hoy, 10:00 • Dra. Pérez",
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        color: Color(0xFF083866),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: Color(0xFF2376F6),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(Icons.chevron_right, color: Colors.white, size: 18),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 3),
-
-                    // Grid de opciones
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: GridView.count(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 14,
-                          mainAxisSpacing: 14,
-                          physics: const NeverScrollableScrollPhysics(),
-                          childAspectRatio: 1.8,
-                          children: filtered.isEmpty
-                              ? [
-                                  const Center(
-                                    child: Text("Sin resultados", style: TextStyle(fontSize: 15)),
-                                  ),
-                                ]
-                              : filtered.asMap().entries
-                                  .map((entry) {
-                                    final section = entry.value;
-                                    return _DashboardCard(
-                                      icon: section.icon,
-                                      label: section.label,
-                                      onTap: () async {
-                                        switch (section.label) {
-                                          case 'Historia clínica':
-                                            _navigateWithAnimation(const HistoriaClinicaScreen(), 'historia_clinica');
-                                            break;
-                                          case 'Sacar turno':
-                                            _navigateWithAnimation(const SacarTurnoScreen(), 'sacar_turno');
-                                            break;
-                                          case 'Ver estudios':
-                                            _navigateWithAnimation(const EstudiosScreen(), 'ver_estudios');
-                                            break;
-                                          case 'Editar perfil':
-                                            _navigateWithAnimation(const MiPerfilScreen(), 'editar_perfil');
-                                            break;
-                                        }
-                                      },
-                                    );
-                                  })
-                                  .toList(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          
-          // Loading overlay
-          if (_isLoading)
-            Container(
-              color: Colors.black54,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2376F6)),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _loadingMessage,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF083866),
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
                   ),
                 ),
               ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DashboardSection {
-  final IconData icon;
-  final String label;
-  _DashboardSection(this.icon, this.label);
-}
-
-class _DashboardCard extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  const _DashboardCard({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  State<_DashboardCard> createState() => _DashboardCardState();
-}
-
-class _DashboardCardState extends State<_DashboardCard> with SingleTickerProviderStateMixin {
-  late AnimationController _scaleController;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _scaleController = AnimationController(
-      duration: const Duration(milliseconds: 150),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.95,
-    ).animate(CurvedAnimation(
-      parent: _scaleController,
-      curve: Curves.easeInOut,
-    ));
-  }
-
-  @override
-  void dispose() {
-    _scaleController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: _scaleAnimation,
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        elevation: 2,
-        shadowColor: Colors.black.withOpacity(0.06),
-        child: InkWell(
-          onTap: widget.onTap,
-          onTapDown: (_) => _scaleController.forward(),
-          onTapUp: (_) => _scaleController.reverse(),
-          onTapCancel: () => _scaleController.reverse(),
-          borderRadius: BorderRadius.circular(18),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: const Color(0xFF2376F6).withOpacity(0.08),
-                width: 1,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2376F6).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: const Color(0xFF2376F6).withOpacity(0.2),
-                      width: 1,
-                    ),
-                  ),
-                  child: Icon(
-                    widget.icon, 
-                    size: 24, 
-                    color: const Color(0xFF2376F6),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  widget.label,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF083866),
-                    height: 1.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          ],
         ),
       ),
     );
   }
-}
 
-class _MainDrawer extends StatelessWidget {
-  final VoidCallback? onLogout;
-  const _MainDrawer({this.onLogout});
-
-  @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    
-    return Drawer(
-      backgroundColor: Colors.white,
-      child: Column(
-        children: [
-          // Header del drawer
-          Container(
-            height: 140,
-            padding: const EdgeInsets.fromLTRB(20, 40, 20, 16),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF2376F6), Color(0xFF73BFFF)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.local_hospital, color: Colors.white, size: 24),
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'ROFFO',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (user != null) 
-                  Text(
-                    user.displayName ?? "Usuario",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          
-          // Opciones del menú
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              children: [
-                _DrawerItem(
-                  icon: Icons.home_rounded,
-                  title: 'Inicio',
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context);
-                  },
-                ),
-                _DrawerItem(
-                  icon: Icons.person_rounded,
-                  title: 'Mi Perfil',
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const MiPerfilScreen()),
-                    );
-                  },
-                ),
-                _DrawerItem(
-                  icon: Icons.folder_shared_rounded,
-                  title: 'Historia Clínica',
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const HistoriaClinicaScreen()),
-                    );
-                  },
-                ),
-                _DrawerItem(
-                  icon: Icons.event_available_rounded,
-                  title: 'Mis Turnos',
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SacarTurnoScreen()),
-                    );
-                  },
-                ),
-                _DrawerItem(
-                  icon: Icons.science_rounded,
-                  title: 'Estudios Médicos',
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const EstudiosScreen()),
-                    );
-                  },
-                ),
-                const Divider(height: 32, indent: 16, endIndent: 16),
-                _DrawerItem(
-                  icon: Icons.notifications_rounded,
-                  title: 'Notificaciones',
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context);
-                  },
-                ),
-                _DrawerItem(
-                  icon: Icons.settings_rounded,
-                  title: 'Configuración',
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context);
-                  },
-                ),
-                _DrawerItem(
-                  icon: Icons.help_outline_rounded,
-                  title: 'Ayuda y Soporte',
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context);
-                  },
-                ),
-                _DrawerItem(
-                  icon: Icons.info_outline_rounded,
-                  title: 'Acerca de',
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context);
-                  },
-                ),
-                const SizedBox(height: 16),
-                _DrawerItem(
-                  icon: Icons.logout_rounded,
-                  title: 'Cerrar Sesión',
-                  isDestructive: true,
-                  onTap: () async {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context);
-                    if (onLogout != null) onLogout!();
-                  },
-                ),
-              ],
-            ),
-          ),
-          
-          // Footer con versión
-          Container(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'Versión 1.0.0',
-              style: TextStyle(
-                color: Colors.grey[500],
-                fontSize: 12,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DrawerItem extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final VoidCallback onTap;
-  final bool isDestructive;
-
-  const _DrawerItem({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    this.isDestructive = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isDestructive ? Colors.red[600] : const Color(0xFF2376F6);
-    
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
-      leading: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: color!.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, color: color, size: 20),
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-          color: isDestructive ? color : const Color(0xFF083866),
-        ),
-      ),
+  // STANDARD slider button
+  Widget _buildSliderButton(BuildContext context, IconData icon, String label, VoidCallback onTap) {
+    return BouncingCard(
       onTap: onTap,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+      child: Container( 
+         width: 104, // 100->104 (8pt grid)
+         decoration: BoxDecoration(
+           color: Colors.white,
+           borderRadius: BorderRadius.circular(16),
+           boxShadow: [BoxShadow(color: const Color(0xFF2376F6).withOpacity(0.08), blurRadius: 16, offset: const Offset(0, 4))], // 8->16 (Softer)
+         ),
+         child: Padding( 
+               padding: const EdgeInsets.symmetric(vertical: 16),
+               child: Column(
+                 mainAxisAlignment: MainAxisAlignment.center,
+                 children: [
+                   Container(
+                     padding: const EdgeInsets.all(12), // 10->12
+                     decoration: const BoxDecoration(
+                       color: Color(0xFFE3F2FD),
+                       shape: BoxShape.circle,
+                     ),
+                     child: Icon(icon, color: const Color(0xFF1565C0), size: 24),
+                   ),
+                   const SizedBox(height: 8),
+                   Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF0D1C2E))),
+                 ],
+               ),
+         ),
+      ),
+    );
+  }
+
+  // STANDARD KPI
+  Widget _buildPatientKPI(IconData icon, String label, String value, Color color, VoidCallback onTap) {
+    return BouncingCard(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16), 
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.1),
+              blurRadius: 16, // 10->16 (Premium Soft)
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: color.withOpacity(0.1)), 
+        ),
+        child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8), // 12->16 (8pt)
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: color, size: 24), 
+                  const SizedBox(height: 8), // 6->8
+                  Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: color), textAlign: TextAlign.center), 
+                  Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[700], fontWeight: FontWeight.bold), textAlign: TextAlign.center), 
+                ],
+              ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTurnoCard(String date, String doctor, String type) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 12),
+      child: BouncingCard(
+          onTap: () {
+             _hapticFeedback();
+             Navigator.push(context, MaterialPageRoute(builder: (_) => const MisTurnosScreen()));
+          },
+         child: Container( 
+           decoration: BoxDecoration(
+             color: Colors.white,
+             borderRadius: BorderRadius.circular(16),
+             border: Border.all(color: Colors.grey.withOpacity(0.1)),
+             boxShadow: [
+               BoxShadow(
+                 color: const Color(0xFF90A4AE).withOpacity(0.08), 
+                 blurRadius: 16, // 15->16
+                 offset: const Offset(0, 4),
+               ),
+             ],
+           ),
+           child: Padding(
+               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), // 14->16 (8pt)
+               child: Row(
+                 children: [
+                    Container(
+                       padding: const EdgeInsets.all(8),
+                       decoration: BoxDecoration(
+                         color: const Color(0xFFE3F2FD),
+                         borderRadius: BorderRadius.circular(12), // 10->12
+                       ),
+                       child: const Icon(Icons.calendar_today_rounded, color: Color(0xFF1565C0), size: 20),
+                     ),
+                     const SizedBox(width: 16), // 14->16
+                     Expanded(
+                       child: Column(
+                         crossAxisAlignment: CrossAxisAlignment.start,
+                         mainAxisAlignment: MainAxisAlignment.center,
+                         children: [
+                           Text(type.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF1565C0), letterSpacing: 0.5)),
+                           const SizedBox(height: 4), 
+                           Text("$date • $doctor", style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF083866), fontSize: 14)),
+                         ],
+                       ),
+                     ),
+                     const Icon(Icons.chevron_right_rounded, color: Colors.grey)
+                 ],
+               ),
+           ),
+         ),
       ),
     );
   }

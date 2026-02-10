@@ -1,18 +1,102 @@
-rules_version='2'
+rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+    
+    // Check if user is signed in
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the user is accessing their own document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Check user role from their user profile document
+    // Note: In production, consider using Custom Claims for better performance/security
+    function hasRole(role) {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    function isDoctor() {
+      return hasRole('medico');
+    }
+
+    // --- Collection Rules ---
+
+    // USERS Collection
+    // - Owner can read/write their own profile
+    // - Admins can read/write all
+    // - Doctors can read properties of patients they treat (simplified to read all for directory)
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin() || isDoctor(); 
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    // APPOINTMENTS (Agenda)
+    // - Doctors can read/write appointments where they are the 'medicoId'
+    // - Patients can read/write appointments where they are the 'pacienteId'
+    // - Admins access all
+    match /appointments/{appointmentId} {
+      allow read: if isAuthenticated() && (
+        resource.data.pacienteId == request.auth.uid || 
+        resource.data.medicoId == request.auth.uid || 
+        isAdmin()
+      );
+      allow write: if isAuthenticated() && (
+        request.resource.data.pacienteId == request.auth.uid || // Patient booking
+        isAdmin() // Admin managing
+        // Doctors usually update status, so logic would be checking 'medicoId' too
+      );
+    }
+
+    // MEDICAL RECORDS (Historias Clínicas)
+    // - Sensitive Data!
+    // - Patient: READ ONLY (Own records)
+    // - Doctor: READ & WRITE (Append entries)
+    // - Admin: READ ONLY (Audit)
+    match /medical_records/{recordId} {
+      allow read: if isOwner(resource.data.pacienteId) || isDoctor() || isAdmin();
+      allow write: if isDoctor(); // Only doctors generate clinical records
+    }
+    
+    // AGENDA (New Collection for Zanoo)
+    match /agenda/{itemId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // AGENDA (New Collection for Zanoo)
+    match /agenda/{itemId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // FARMACIAS (Public read, Authenticated write for seed)
+    match /farmacias/{itemId} {
+      allow read;
+      allow write: if isAuthenticated();
+    }
+    
+    // RECETAS
+    match /recetas/{itemId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // ORDENES MEDICAS
+    match /ordenes_medicas/{itemId} {
+       allow read, write: if isAuthenticated();
+    }
+
+    // Default Deny
     match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
-      allow read, write: if request.time < timestamp.date(2025, 8, 30);
+      allow read, write: if false;
     }
   }
 }

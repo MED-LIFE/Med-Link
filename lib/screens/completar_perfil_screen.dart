@@ -522,7 +522,7 @@ Container(
                       context,
                       MaterialPageRoute(
                           builder: (_) =>
-                              MisTurnosScreen(turnos: turnosReservados)));
+                              SimpleTurnosListScreen(turnos: turnosReservados)));
                 },
                 icon: const Icon(Icons.list_alt_rounded,
                     color: Color(0xFF2376F6)),
@@ -642,9 +642,9 @@ class ConfirmacionTurnoScreen extends StatelessWidget {
 }
 
 // -------- MIS TURNOS ---------
-class MisTurnosScreen extends StatelessWidget {
+class SimpleTurnosListScreen extends StatelessWidget {
   final List<Map<String, String>> turnos;
-  const MisTurnosScreen({super.key, required this.turnos});
+  const SimpleTurnosListScreen({super.key, required this.turnos});
 
   @override
   Widget build(BuildContext context) {

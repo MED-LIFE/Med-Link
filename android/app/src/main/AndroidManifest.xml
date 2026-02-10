@@ -1,13 +1,12 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.medlink.rofapp">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Permisos básicos -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <!-- Sumá más permisos según funciones (ej: cámara, ubicación, etc) -->
 
     <application
-        android:name=".MainApplication"
-        android:label="MedLink"
+        android:label="ZANOO"
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/LaunchTheme">
 

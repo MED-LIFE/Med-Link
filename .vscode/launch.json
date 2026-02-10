@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ZANOO (Port 5353)",
+            "request": "launch",
+            "type": "dart",
+            "args": [
+                "--web-port=5353"
+            ]
+        },
+        {
+            "name": "ZANOO (Mobile)",
+            "request": "launch",
+            "type": "dart"
+        }
+    ]
+}

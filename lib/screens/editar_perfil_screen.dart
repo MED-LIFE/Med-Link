@@ -28,7 +28,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
 
   Map<String, String> datosCobertura = {
     "tipo": "Prepaga",
-    "nombre": "Instituto Ángel H. Roffo",
+    "nombre": "Centro Médico",
     "numeroAfiliado": "987654321",
     "vencimiento": "31/12/2025",
   };
@@ -328,7 +328,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
               ),
               _buildInfoPill(
                 Icons.local_hospital_rounded,
-                "Roffo",
+                "Centro Médico",
                 const Color(0xFF059669),
               ),
             ],

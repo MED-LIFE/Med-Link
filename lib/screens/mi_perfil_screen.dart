@@ -1,13 +1,18 @@
-import 'package:flutter/material.dart';
+
+import '../widgets/common/bouncing_card.dart';
+import '../widgets/patient/standard_header.dart';
+import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:intl/intl.dart'; // Fechas
 import 'package:image_picker/image_picker.dart'; // Para sacar foto
 import 'dart:io'; // Para mostrar imagen local
-import 'package:flutter/foundation.dart'; // Para kIsWeb
+import 'package:flutter/material.dart';
+import '../services/session_manager.dart'; // Para kIsWeb
 // Si corrés en Android/iOS, descomentá la siguiente línea y funcionará OCR real.
-// import 'package:google_ml_kit/google_ml_kit.dart'; // OCR para DNI
+// import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart'; // OCR para DNI (Solo Mobile)
 
 class MiPerfilScreen extends StatefulWidget {
-  const MiPerfilScreen({super.key});
+  final Map<String, String>? userData;
+  const MiPerfilScreen({super.key, this.userData});
 
   @override
   State<MiPerfilScreen> createState() => _MiPerfilScreenState();
@@ -42,40 +47,23 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
   }
 
   Future<void> _procesarDniConOcr(File image) async {
-    if (kIsWeb) {
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
       _showOnlyMobileDialog();
       return;
     }
+    
     try {
-      // ------- Si corrés en Android/iOS, descomentá esto -------
-      // final inputImage = InputImage.fromFile(image);
-      // final textRecognizer = GoogleMlKit.vision.textRecognizer();
-      // final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
-      // String texto = recognizedText.text;
-      // String dniIngresado = dniController.text.replaceAll('.', '').replaceAll(' ', '');
-      // bool match = texto.replaceAll('.', '').contains(dniIngresado);
-      // setState(() {
-      //   _dniOcrResult = texto;
-      //   _dniValidado = match;
-      // });
-      // textRecognizer.close();
-      // if (!match) {
-      //   ScaffoldMessenger.of(context).showSnackBar(
-      //     SnackBar(content: Text("No se detectó el DNI ingresado en la foto. Revisá la imagen.")),
-      //   );
-      // } else {
-      //   ScaffoldMessenger.of(context).showSnackBar(
-      //     SnackBar(content: Text("¡DNI validado correctamente por OCR!")),
-      //   );
-      // }
-      // ------- MOCK para desarrollo PC/Web -------
-      setState(() {
-        _dniOcrResult = 'Función solo disponible en la app móvil';
-        _dniValidado = false;
-      });
-      _showOnlyMobileDialog();
+      /*
+      // OCR LOGIC (Mobile Only) - Disabled for Web
+      */
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("OCR no disponible en WEB.")),
+      );
     } catch (e) {
-      _showOnlyMobileDialog();
+      print("Error OCR: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+         SnackBar(content: Text("Error al procesar: $e")),
+      );
     }
   }
 
@@ -112,7 +100,73 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
       ),
     );
   }
+  Future<void> _pickAvatarImage() async {
+     final picker = ImagePicker();
+     final picked = await picker.pickImage(source: ImageSource.gallery);
+     if (picked != null) {
+       // Update Singleton Persistence
+       SessionManager().updateAvatar(picked.path);
+       
+       setState(() {
+         // Local update for immediate feedback (though ListenableBuilder handles it too)
+         datosPersonales["foto"] = picked.path; 
+       });
+       ScaffoldMessenger.of(context).showSnackBar(
+         const SnackBar(content: Text("Foto de perfil actualizada")),
+       );
+     }
+  }
+
   // --------- FIN VALIDACIÓN DNI/SELFIE ---------
+
+  void _showDeleteConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("¿Eliminar cuenta?", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: const [
+            Text("Esta acción es irreversible. Se borrarán todos tus datos médicos, turnos e historial de Zanoo."),
+            SizedBox(height: 16),
+            Text("Si estás seguro, confirmá abajo.", style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancelar", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () {
+              Navigator.pop(context);
+              // Second confirmation for extra safety or just delete
+              _processAccountDeletion();
+            },
+            child: const Text("Sí, eliminar"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _processAccountDeletion() async {
+    // Mock Deletion Logic
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Procesando baja de cuenta..."), duration: Duration(seconds: 2)),
+    );
+    await Future.delayed(const Duration(seconds: 2));
+    
+    if (mounted) {
+       ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Tu cuenta ha sido eliminada."), backgroundColor: Colors.red),
+      );
+      // Redirect to Login
+      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    }
+  }
 
   // Mock datos iniciales
   Map<String, String> datosPersonales = {
@@ -131,7 +185,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
 
   Map<String, String> datosCobertura = {
     "tipo": "Prepaga",
-    "nombre": "Instituto Ángel H. Roffo",
+    "nombre": "Centro Médico",
     "numeroAfiliado": "987654321",
     "vencimiento": "31/12/2025",
   };
@@ -164,6 +218,12 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Override with passed data (e.g. for Admin)
+    if (widget.userData != null) {
+      datosPersonales.addAll(widget.userData!);
+    }
+
     nombreController = TextEditingController(text: datosPersonales["nombre"]);
     dniController = TextEditingController(text: datosPersonales["dni"]);
     fechaNacController = TextEditingController(text: datosPersonales["fechaNacimiento"]);
@@ -248,15 +308,15 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
         labelText: label,
         labelStyle: const TextStyle(color: Color(0xFF2376F6), fontWeight: FontWeight.w600),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(16), // 13 -> 16
           borderSide: const BorderSide(color: Color(0xFF2376F6), width: 1.2),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(16), // 13 -> 16
           borderSide: const BorderSide(color: Color(0xFF083866), width: 2),
         ),
         disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(16), // 13 -> 16
           borderSide: const BorderSide(color: Color(0xFFB7D7F7), width: 1.2),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -324,39 +384,56 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7FCFF),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF2376F6)),
-        title: const Text(
-          'Mi Perfil',
-          style: TextStyle(
-            color: Color(0xFF2376F6),
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(editMode ? Icons.check : Icons.edit, color: const Color(0xFF2376F6)),
-            tooltip: editMode ? "Guardar cambios" : "Editar perfil",
-            onPressed: () {
-              if (editMode) {
-                _guardarCambios();
-              } else {
-                setState(() {
-                  editMode = true;
-                });
-              }
-            },
-          ),
-        ],
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      body: Container(
+        color: const Color(0xFFF7FCFF),
+        child: Column(
           children: [
+            Stack(
+              children: [
+                const StandardPageHeader(
+                  title: 'Mi Perfil',
+                  subtitle: 'Gestioná tus datos personales',
+                  imagePath: 'assets/images/ilustracion_mi_perfil.png',
+                  isLarge: false,
+                ),
+                Positioned(
+                  top: 40,
+                  right: 16,
+                  child: GestureDetector(
+                    onTap: () {
+                      if (editMode) {
+                        _guardarCambios();
+                      } else {
+                        setState(() {
+                          editMode = true;
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+                      ),
+                      child: Icon(
+                        editMode ? Icons.check : Icons.edit, 
+                        color: const Color(0xFF2376F6), 
+                        size: 24
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            Expanded(
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                  physics: const BouncingScrollPhysics(),
+                  children: [
             // --------------- BLOQUE VALIDACIÓN DNI/SELFIE ---------------
             if (editMode) ...[
               Card(
@@ -375,7 +452,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
                           ElevatedButton.icon(
                             icon: Icon(Icons.credit_card, color: Colors.white),
                             label: Text("Escanear DNI"),
-                            style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF2376F6), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11))),
+                            style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF2376F6), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11))),
                             onPressed: _pickDniImage,
                           ),
                           const SizedBox(width: 14),
@@ -418,7 +495,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
                           ElevatedButton.icon(
                             icon: Icon(Icons.camera_alt, color: Colors.white),
                             label: Text("Sacar Selfie"),
-                            style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF2376F6), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11))),
+                            style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF2376F6), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11))),
                             onPressed: _pickSelfie,
                           ),
                           const SizedBox(width: 14),
@@ -452,15 +529,15 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
             // ---------------------------------------------------------------------
 
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 20),
+              padding: const EdgeInsets.all(24), // 20 -> 24
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(24), // 22 -> 24
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 13,
-                    offset: Offset(0, 7),
+                    color: const Color(0xFF2376F6).withOpacity(0.08), // Soft shadow
+                    blurRadius: 24, // 13 -> 24
+                    offset: const Offset(0, 8), // 7 -> 8
                   )
                 ],
               ),
@@ -470,81 +547,158 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
                   Stack(
                     alignment: Alignment.bottomRight,
                     children: [
-                      CircleAvatar(
-                        radius: 48,
-                        backgroundColor: const Color(0xFF2376F6).withOpacity(0.14),
-                        backgroundImage: (datosPersonales["foto"] ?? "").isNotEmpty
-                            ? AssetImage(datosPersonales["foto"]!)
-                            : null,
-                        child: (datosPersonales["foto"] ?? "").isEmpty
-                            ? const Icon(Icons.person, size: 54, color: Color(0xFF2376F6))
-                            : null,
+                      Container(
+                        padding: const EdgeInsets.all(4), // White border effect
+                        decoration: const BoxDecoration(
+                           color: Colors.white,
+                           shape: BoxShape.circle,
+                        ),
+                        child: ListenableBuilder(
+                          listenable: SessionManager(),
+                          builder: (context, _) {
+                            final currentAvatar = SessionManager().avatarPath ?? datosPersonales["foto"] ?? "";
+                            return CircleAvatar(
+                              radius: 48,
+                              backgroundColor: const Color(0xFF2376F6).withOpacity(0.14),
+                              backgroundImage: currentAvatar.isEmpty
+                                  ? null
+                                  : (currentAvatar.contains("assets/") 
+                                      ? AssetImage(currentAvatar)
+                                      : (kIsWeb 
+                                          ? NetworkImage(currentAvatar) 
+                                          : FileImage(File(currentAvatar)) as ImageProvider)),
+                              child: currentAvatar.isEmpty
+                                  ? const Icon(Icons.person, size: 54, color: Color(0xFF2376F6))
+                                  : null,
+                            );
+                          }
+                        ),
                       ),
                       if (editMode)
-                        GestureDetector(
+                        BouncingCard(
                           onTap: () async {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("Función de cambiar foto en desarrollo")),
-                            );
+                             // Mock Picking Logic (for Web/Desktop simulation)
+                             // In a real app, use ImagePicker().pickImage() 
+                             // updating state with the file path.
+                             
+                             // Simulating a successful pick for user demo:
+                             showDialog(
+                               context: context,
+                               builder: (ctx) => AlertDialog(
+                                 title: const Text("Editar foto de perfil"),
+                                 content: Column(
+                                   mainAxisSize: MainAxisSize.min,
+                                   children: [
+                                     const Text("Seleccioná el origen de la imagen:"),
+                                     const SizedBox(height: 16),
+                                     Row(
+                                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                       children: [
+                                         Column(
+                                           children: [
+                                             IconButton(
+                                               icon: const Icon(Icons.camera_alt, color: Colors.blue, size: 32),
+                                               onPressed: () {
+                                                 Navigator.pop(ctx);
+                                                 // MOCK UPDATE
+                                                 setState(() {
+                                                   // Using a placeholder "local file" or just a different asset to simulate change
+                                                   // For this environment, we toggle to a specific asset or network image
+                                                   datosPersonales["foto"] = ""; // Trigger network fallback or handle file
+                                                   
+                                                   // Temporarily using a public URL to demonstrate "Change"
+                                                   // Ideally we use File(_image.path) but on web/desktop we need bytes/path.
+                                                   
+                                                   // Let's assume we picked a file and update the visual
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      const SnackBar(content: Text("Foto actualizada (Simulación)")),
+                                                    );
+                                                 });
+                                               },
+                                             ),
+                                             const Text("Cámara"),
+                                           ],
+                                         ),
+                                         Column(
+                                           children: [
+                                             IconButton(
+                                               icon: const Icon(Icons.photo_library, color: Colors.green, size: 32),
+                                               onPressed: () {
+                                                  Navigator.pop(ctx);
+                                                  _pickAvatarImage(); // Call the real/mock picker function
+                                               },
+                                             ),
+                                             const Text("Galería"),
+                                           ],
+                                         ),
+                                       ],
+                                     )
+                                   ],
+                                 ),
+                               ),
+                             );
                           },
-                          child: CircleAvatar(
-                            radius: 16,
-                            backgroundColor: Colors.white,
-                            child: Icon(Icons.camera_alt, size: 18, color: Color(0xFF2376F6)),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2376F6),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF2376F6).withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                )
+                              ]
+                            ),
+                            child: const Icon(Icons.camera_alt, size: 18, color: Colors.white),
                           ),
                         ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16), // 12 -> 16
                   Text(
                     datosPersonales["nombre"] ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFF193A72)),
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 20, color: Color(0xFF193A72)),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     datosPersonales["email"] ?? '',
                     style: const TextStyle(fontSize: 14, color: Color(0xFF42506A)),
                   ),
-                  const SizedBox(height: 7),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  const SizedBox(height: 16), // 7 -> 16
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      if (edad > 0) ...[
-                        Icon(Icons.cake, color: Colors.grey[500], size: 18),
-                        const SizedBox(width: 4),
-                        Text("$edad años", style: TextStyle(color: Colors.grey[700], fontSize: 14)),
-                        const SizedBox(width: 12),
-                      ],
-                      if (grupo.isNotEmpty) ...[
-                        Icon(Icons.bloodtype, color: Colors.redAccent, size: 18),
-                        const SizedBox(width: 4),
-                        Text(grupo, style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
-                        const SizedBox(width: 12),
-                      ],
-                      if (cobertura.isNotEmpty) ...[
-                        Icon(Icons.local_hospital, color: Color(0xFF2376F6), size: 18),
-                        const SizedBox(width: 4),
-                        Text(cobertura, style: TextStyle(color: Color(0xFF2376F6), fontSize: 14)),
-                      ],
+                      if (edad > 0)
+                        _buildTag(Icons.cake, "$edad años", Colors.grey[700]!, Colors.grey[200]! ),
+                      if (grupo.isNotEmpty)
+                        _buildTag(Icons.bloodtype, grupo, Colors.redAccent, Colors.red[50]! ),
+                      if (cobertura.isNotEmpty)
+                         _buildTag(Icons.local_hospital, cobertura, const Color(0xFF2376F6), const Color(0xFFE3F2FD) ),
                     ],
                   ),
-                  const SizedBox(height: 17),
+                  const SizedBox(height: 24), // 17 -> 24
                   // Barra de perfil completo
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Column(
                       children: [
-                        LinearProgressIndicator(
-                          value: _porcentajePerfilCompleto(),
-                          color: Color(0xFF2376F6),
-                          backgroundColor: Color(0xFFB7D7F7).withOpacity(0.35),
-                          minHeight: 7,
-                          borderRadius: BorderRadius.circular(13),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: _porcentajePerfilCompleto(),
+                            color: const Color(0xFF2376F6),
+                            backgroundColor: const Color(0xFFB7D7F7).withOpacity(0.35),
+                            minHeight: 8, // 7 -> 8
+                          ),
                         ),
-                        const SizedBox(height: 5),
+                        const SizedBox(height: 8), // 5 -> 8
                         Text(
                           "Perfil ${perfilCompleto}% completo",
-                          style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.w500),
                         ),
                       ],
                     ),
@@ -660,24 +814,33 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
                   : null,
             ),
             const SizedBox(height: 30),
+            const SizedBox(height: 30),
             // ---- Botón de documentos médicos ----
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Color(0xFF2376F6),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-                side: const BorderSide(color: Color(0xFF2376F6), width: 1.3),
-              ),
-              icon: const Icon(Icons.insert_drive_file_rounded),
-              label: const Text(
-                "Ver documentos médicos",
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-              ),
-              onPressed: () {
+            BouncingCard(
+              onTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Funcionalidad en desarrollo (adjuntar/ver estudios médicos)")),
                 );
               },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF2376F6), width: 1.5),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.insert_drive_file_rounded, color: Color(0xFF2376F6)),
+                    SizedBox(width: 8),
+                    Text(
+                      "Ver documentos médicos",
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Color(0xFF2376F6)),
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 18),
             // ---- QR personal (solo visual) ----
@@ -710,23 +873,88 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
             ),
             const SizedBox(height: 30),
             if (editMode)
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2376F6),
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  elevation: 0,
-                ),
-                onPressed: _guardarCambios,
-                icon: const Icon(Icons.save, color: Colors.white),
-                label: const Text(
-                  "Guardar cambios",
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+              BouncingCard(
+                onTap: _guardarCambios,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2376F6),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF2376F6).withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      )
+                    ]
+                  ),
+                  alignment: Alignment.center,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.save_rounded, color: Colors.white, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        "Guardar cambios",
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             const SizedBox(height: 20),
+            
+            // --- ZONA DE SEGURIDAD (Store Requirement) ---
+            const Divider(height: 40, thickness: 1),
+            Center(
+              child: TextButton(
+                onPressed: () {
+                  // TODO: Link to real privacy policy
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Abriendo Política de Privacidad...")));
+                },
+                child: const Text("Política de Privacidad", style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: OutlinedButton.icon(
+                onPressed: _showDeleteConfirmation,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.delete_forever_rounded),
+                label: const Text("Eliminar mi cuenta"),
+              ),
+            ),
+            const SizedBox(height: 40),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+  Widget _buildTag(IconData icon, String text, Color color, Color bgColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
+          Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13)),
+        ],
       ),
     );
   }

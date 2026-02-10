@@ -1,1050 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:app_roffo/screens/completar_perfil_screen.dart';
-import 'package:app_roffo/screens/sacar_turno_screen.dart';
-import 'package:app_roffo/screens/mi_perfil_screen.dart';
-import 'package:app_roffo/screens/estudios_screen.dart';
+import 'package:zanoo/screens/completar_perfil_screen.dart';
+import 'package:zanoo/screens/sacar_turno_screen.dart';
+import 'package:zanoo/screens/mi_perfil_screen.dart';
+import 'package:zanoo/screens/estudios_screen.dart';
+import 'package:zanoo/services/pdf_service.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:zanoo/widgets/common/premium_access_dialog.dart';
 import 'dart:math' as math;
 
-// =============== MODELOS DE DATOS ===================
-class HistoriaClinicaData {
-  final String dni;
-  final String centro;
-  final String edad;
-  final String proximaCita;
-  final String fechaActualizacion;
-  final String resumen;
-  final String diagnostico;
-  final String medicamentos;
-  final Map<String, dynamic> datosCompletos;
-
-  HistoriaClinicaData({
-    required this.dni,
-    required this.centro,
-    required this.edad,
-    required this.proximaCita,
-    required this.fechaActualizacion,
-    required this.resumen,
-    required this.diagnostico,
-    required this.medicamentos,
-    required this.datosCompletos,
-  });
-
-  factory HistoriaClinicaData.fromMap(Map<String, dynamic> data) {
-    return HistoriaClinicaData(
-      dni: data['dni'] ?? '-',
-      centro: data['centro'] ?? 'Instituto Ángel H. Roffo',
-      edad: data['edad']?.toString() ?? '-',
-      proximaCita: data['proxima_cita'] ?? 'Sin datos',
-      fechaActualizacion: data['fecha_actualizacion'] ?? '--/--/----',
-      resumen: data['resumen'] ?? "Sin datos de resumen.",
-      diagnostico: data['diagnostico'] ?? "Sin diagnóstico principal.",
-      medicamentos: data['medicamentos'] ?? "Sin medicación activa.",
-      datosCompletos: data,
-    );
-  }
-}
-
-// =============== CONSTANTES Y DATOS MOCK ===================
-class HistoriaClinicaConstants {
-  static const Color primaryColor = Color(0xFF2376F6);
-  static const Color secondaryColor = Color(0xFF73BFFF);
-  static const Color accentColor = Color(0xFF4FE1F3);
-  static const Color darkBlue = Color(0xFF193A72);
-  static const Color mediumGray = Color(0xFF42506A);
-  static const Color lightGray = Color(0xFFB6BFC9);
-  static const Color backgroundColor = Color(0xFFF7FCFF);
-  static const Color cardColor = Color(0xFFF1F8FE);
-  
-  // Rutas de assets
-  static const String bannerImagePath = 'assets/images/historia_clinica.png';
-  static const String defaultIllustracion = 'assets/images/ilustracion_historia_clinica.png';
-  
-  // Datos mock mejorados
-  static const List<Map<String, dynamic>> diagnosticosMock = [
-    {
-      "codigo": "I10",
-      "nombre": "Hipertensión arterial esencial",
-      "descripcion": "Elevación persistente de la presión arterial. Requiere control regular, adherencia a medicación y cambios en el estilo de vida.",
-      "fechaDiagnostico": "15/03/2024",
-      "medico": "Dr. Fernández",
-      "severidad": "Moderada",
-      "estado": "Activo",
-      "indicadores": {
-        "presionUltima": "142/92 mmHg",
-        "riesgoCardiovascular": "Moderado",
-        "ultimaMejora": "-5 mmHg"
-      }
-    },
-    {
-      "codigo": "E11",
-      "nombre": "Diabetes mellitus tipo 2",
-      "descripcion": "Diabetes tipo 2 con buen control glucémico mediante medicación y dieta.",
-      "fechaDiagnostico": "22/08/2023",
-      "medico": "Dra. González",
-      "severidad": "Leve",
-      "estado": "Controlado",
-      "indicadores": {
-        "glucemiaUltima": "126 mg/dl",
-        "hba1c": "6.8%",
-        "ultimaMejora": "-0.3% HbA1c"
-      }
-    }
-  ];
-
-  static const List<Map<String, dynamic>> turnosMock = [
-    {
-      "fecha": "10 de agosto, 2025",
-      "profesional": "Dra. Pérez",
-      "estado": "Realizado",
-      "hora": "10:00 AM",
-      "especialidad": "Clínica médica",
-      "motivo": "Control rutinario",
-      "consultorio": "1A",
-      "observaciones": "Paciente concurrió puntualmente. Control satisfactorio."
-    },
-    {
-      "fecha": "05 de julio, 2025",
-      "profesional": "Dra. Gómez",
-      "estado": "Ausente",
-      "hora": "09:00 AM",
-      "especialidad": "Cardiología",
-      "motivo": "Control cardiológico",
-      "consultorio": "2B",
-      "observaciones": "Paciente no se presentó sin aviso previo."
-    },
-    {
-      "fecha": "20 de junio, 2025",
-      "profesional": "Dr. Ledesma",
-      "estado": "Realizado",
-      "hora": "11:30 AM",
-      "especialidad": "Cardiología",
-      "motivo": "Seguimiento hipertensión",
-      "consultorio": "2A",
-      "observaciones": "Excelente evolución. Continuar tratamiento actual."
-    },
-    {
-      "fecha": "15 de agosto, 2025",
-      "profesional": "Dr. Russo",
-      "estado": "Próximo",
-      "hora": "14:00 PM",
-      "especialidad": "Clínica médica",
-      "motivo": "Control trimestral",
-      "consultorio": "1C",
-      "observaciones": "Turno confirmado. Traer estudios recientes."
-    }
-  ];
-
-  static const List<Map<String, dynamic>> medicamentosMock = [
-    {
-      "nombre": "Losartán 50mg",
-      "principioActivo": "Losartán potásico",
-      "indicacion": "1 comp. cada 12 hs",
-      "viaAdministracion": "Oral",
-      "fechaInicio": "15/03/2024",
-      "fechaVencimiento": "15/03/2025",
-      "medico": "Dr. Fernández",
-      "pedidos": 7,
-      "ordenes": 2,
-      "categoria": "Antihipertensivo",
-      "alertas": [],
-      "activo": true
-    },
-    {
-      "nombre": "Enalapril 10mg",
-      "principioActivo": "Enalapril maleato",
-      "indicacion": "1 comp. por la mañana",
-      "viaAdministracion": "Oral",
-      "fechaInicio": "22/08/2023",
-      "fechaVencimiento": "22/08/2025",
-      "medico": "Dra. González",
-      "pedidos": 5,
-      "ordenes": 1,
-      "categoria": "IECA",
-      "alertas": ["Controlar función renal"],
-      "activo": true
-    },
-    {
-      "nombre": "Metformina 850mg",
-      "principioActivo": "Metformina clorhidrato",
-      "indicacion": "1 comp. cada 12 hs con las comidas",
-      "viaAdministracion": "Oral",
-      "fechaInicio": "22/08/2023",
-      "fechaVencimiento": "22/08/2025",
-      "medico": "Dra. González",
-      "pedidos": 8,
-      "ordenes": 3,
-      "categoria": "Antidiabético",
-      "alertas": [],
-      "activo": true
-    }
-  ];
-
-  static const List<Map<String, dynamic>> signosVitalesMock = [
-    {
-      "fecha": "10/08/2025",
-      "presionSistolica": 138,
-      "presionDiastolica": 88,
-      "frecuenciaCardiaca": 72,
-      "temperatura": 36.5,
-      "peso": 78.5,
-      "altura": 170,
-      "saturacionOxigeno": 98,
-      "glucemia": 124
-    },
-    {
-      "fecha": "05/07/2025",
-      "presionSistolica": 142,
-      "presionDiastolica": 92,
-      "frecuenciaCardiaca": 76,
-      "temperatura": 36.8,
-      "peso": 79.2,
-      "altura": 170,
-      "saturacionOxigeno": 97,
-      "glucemia": 132
-    }
-  ];
-}
-
-// =============== COMPONENTES REUTILIZABLES ===================
-class LoadingCard extends StatelessWidget {
-  final String message;
-  
-  const LoadingCard({
-    Key? key,
-    this.message = "Cargando información médica...",
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(HistoriaClinicaConstants.primaryColor),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: const TextStyle(
-              color: HistoriaClinicaConstants.mediumGray,
-              fontSize: 16,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ✅ NUEVO COMPONENTE: Banner Limpio (reemplaza los banners coloridos horribles)
-class CleanInfoCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String description;
-  
-  const CleanInfoCard({
-    Key? key,
-    required this.icon,
-    required this.title,
-    required this.description,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 18),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              icon,
-              color: Colors.grey.shade600,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                    color: Color(0xFF193A72),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: const TextStyle(
-                    color: Color(0xFF42506A),
-                    fontSize: 14,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// =============== PANTALLA DE CARGA TECH MEJORADA (CAP 1 FIX) ===================
-class TechLoadingScreen extends StatefulWidget {
-  const TechLoadingScreen({Key? key}) : super(key: key);
-
-  @override
-  State<TechLoadingScreen> createState() => _TechLoadingScreenState();
-}
-
-class _TechLoadingScreenState extends State<TechLoadingScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _rotationController;
-  late AnimationController _fadeController;
-  late AnimationController _scaleController;
-  late Animation<double> _rotationAnimation;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _rotationController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    )..repeat();
-    
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    )..repeat(reverse: true);
-    
-    _scaleController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    )..repeat(reverse: true);
-
-    _rotationAnimation = Tween<double>(
-      begin: 0,
-      end: 2 * math.pi,
-    ).animate(CurvedAnimation(
-      parent: _rotationController,
-      curve: Curves.linear,
-    ));
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.3,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeInOut,
-    ));
-
-    _scaleAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.1,
-    ).animate(CurvedAnimation(
-      parent: _scaleController,
-      curve: Curves.easeInOut,
-    ));
-  }
-
-  @override
-  void dispose() {
-    _rotationController.dispose();
-    _fadeController.dispose();
-    _scaleController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7FCFF),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF7FCFF), Color(0xFFE8F4FF)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Logo animado
-              AnimatedBuilder(
-                animation: _scaleAnimation,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: _scaleAnimation.value,
-                    child: Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2376F6).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF2376F6).withOpacity(0.2),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.local_hospital_rounded,
-                        color: Color(0xFF2376F6),
-                        size: 40,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              
-              const SizedBox(height: 40),
-              
-              // Indicador de carga circular tech
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Círculo externo giratorio
-                  AnimatedBuilder(
-                    animation: _rotationAnimation,
-                    builder: (context, child) {
-                      return Transform.rotate(
-                        angle: _rotationAnimation.value,
-                        child: Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: const Color(0xFF2376F6).withOpacity(0.2),
-                              width: 2,
-                            ),
-                          ),
-                          child: CustomPaint(
-                            painter: LoadingCirclePainter(),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  // Círculo interno pulsante
-                  AnimatedBuilder(
-                    animation: _fadeAnimation,
-                    builder: (context, child) {
-                      return Opacity(
-                        opacity: _fadeAnimation.value,
-                        child: Container(
-                          width: 20,
-                          height: 20,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Color(0xFF2376F6),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 30),
-              
-              // Texto animado
-              AnimatedBuilder(
-                animation: _fadeAnimation,
-                builder: (context, child) {
-                  return Opacity(
-                    opacity: _fadeAnimation.value,
-                    child: Column(
-                      children: [
-                        const Text(
-                          'Cargando información médica...',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF2376F6),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Verificando credenciales y cargando datos...',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-              
-              const SizedBox(height: 40),
-              
-              // Indicadores de progreso
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(3, (index) {
-                  return AnimatedBuilder(
-                    animation: _fadeController,
-                    builder: (context, child) {
-                      final delay = index * 0.3;
-                      final progress = (_fadeController.value + delay) % 1.0;
-                      return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Color.lerp(
-                            const Color(0xFF2376F6).withOpacity(0.3),
-                            const Color(0xFF2376F6),
-                            progress,
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                }),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class LoadingCirclePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF2376F6)
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    const sweepAngle = math.pi / 2;
-    
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: size.width / 2 - 2),
-      -math.pi / 2,
-      sweepAngle,
-      false,
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}
-
-// =============== COMPONENTES TECH MEJORADOS (CAP 2/3 FIX) ===================
-class TechInfoCard extends StatefulWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final List<Color> gradientColors;
-  final bool isVerified;
-  
-  const TechInfoCard({
-    Key? key,
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.gradientColors,
-    this.isVerified = false,
-  }) : super(key: key);
-
-  @override
-  State<TechInfoCard> createState() => _TechInfoCardState();
-}
-
-class _TechInfoCardState extends State<TechInfoCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _shimmerAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(seconds: 3),
-      vsync: this,
-    );
-
-    _shimmerAnimation = Tween<double>(
-      begin: -1.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOut,
-    ));
-
-    // Shimmer pasa solo UNA vez
-    if (widget.isVerified) {
-      _controller.forward();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // ARREGLO DEFINITIVO: Container con constraints estrictos
-    return Container(
-      height: 80, // ALTURA MÁS ESTRICTA
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
-          colors: widget.gradientColors,
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: widget.gradientColors.first.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          // Efecto shimmer - SOLO UNA VEZ
-          if (widget.isVerified)
-            AnimatedBuilder(
-              animation: _shimmerAnimation,
-              builder: (context, child) {
-                return Positioned.fill(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.transparent,
-                            Colors.white.withOpacity(0.2),
-                            Colors.transparent,
-                          ],
-                          stops: const [0.0, 0.5, 1.0],
-                          transform: GradientTransformation(_shimmerAnimation.value),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          // Contenido principal - PADDING FIJO
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20), // PADDING FIJO
-            child: Row(
-              children: [
-                Container(
-                  width: 42, // TAMAÑO FIJO
-                  height: 42, // TAMAÑO FIJO
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                      width: 2,
-                    ),
-                  ),
-                  child: Icon(
-                    widget.icon,
-                    color: Colors.white,
-                    size: 22, // TAMAÑO FIJO
-                  ),
-                ),
-                const SizedBox(width: 14), // SPACING FIJO
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center, // CENTRADO PERFECTO
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              widget.title,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15, // TAMAÑO FIJO
-                                height: 1.2, // LINE HEIGHT FIJO
-                              ),
-                              maxLines: 1, // UNA SOLA LÍNEA
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (widget.isVerified)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.25),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: const [
-                                  Icon(
-                                    Icons.verified,
-                                    color: Colors.white,
-                                    size: 10,
-                                  ),
-                                  SizedBox(width: 3),
-                                  Text(
-                                    'Verificado',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 3), // SPACING FIJO
-                      Text(
-                        widget.subtitle,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12, // TAMAÑO FIJO
-                          height: 1.2, // LINE HEIGHT FIJO
-                        ),
-                        maxLines: 1, // UNA SOLA LÍNEA FORZADA
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class GradientTransformation extends GradientTransform {
-  final double progress;
-  
-  const GradientTransformation(this.progress);
-
-  @override
-  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
-    return Matrix4.translationValues(bounds.width * progress, 0, 0);
-  }
-}
-
-class ErrorCard extends StatelessWidget {
-  final String message;
-  final VoidCallback? onRetry;
-  
-  const ErrorCard({
-    Key? key,
-    this.message = "Error al cargar la información",
-    this.onRetry,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.error_outline,
-            color: Colors.red[400],
-            size: 48,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: TextStyle(
-              color: Colors.red[700],
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          if (onRetry != null) ...[
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text("Reintentar"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red[400],
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class IdentificationBanner extends StatelessWidget {
-  final HistoriaClinicaData data;
-  
-  const IdentificationBanner({
-    Key? key,
-    required this.data,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [HistoriaClinicaConstants.primaryColor, HistoriaClinicaConstants.secondaryColor],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.2),
-                width: 1,
-              ),
-            ),
-            child: const Icon(
-              Icons.verified_user_rounded,
-              color: Colors.white,
-              size: 26,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Identificación del paciente",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    _buildInfoChip("DNI: ${data.dni}"),
-                    const SizedBox(width: 8),
-                    _buildInfoChip(data.centro.length > 15 ? "Roffo" : data.centro),
-                    const SizedBox(width: 8),
-                    _buildInfoChip("${data.edad} años"),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoChip(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.2),
-          width: 0.5,
-        ),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
-}
-
-class NextAppointmentBanner extends StatelessWidget {
-  final String proximaCita;
-  
-  const NextAppointmentBanner({
-    Key? key,
-    required this.proximaCita,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [HistoriaClinicaConstants.accentColor, HistoriaClinicaConstants.secondaryColor],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.2),
-                width: 1,
-              ),
-            ),
-            child: const Icon(
-              Icons.event_available_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Próxima cita médica",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  proximaCita,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+import '../../models/medical_history_model.dart';
+import '../../repositories/history_repository.dart';
+import '../../widgets/patient/loading_widgets.dart';
+import '../../widgets/patient/info_cards.dart';
+import '../../widgets/patient/history_banners.dart';
+import '../../widgets/patient/standard_header.dart';
+import '../../widgets/common/bouncing_card.dart';
 
 // =============== SUBPANTALLAS DETALLADAS ===================
 class DiagnosticoDetailScreen extends StatelessWidget {
@@ -1058,49 +31,47 @@ class DiagnosticoDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: HistoriaClinicaConstants.backgroundColor,
-      appBar: AppBar(
-        leading: BackButton(color: HistoriaClinicaConstants.primaryColor),
-        title: const Text(
-          'Diagnóstico Detallado',
-          style: TextStyle(
-            color: HistoriaClinicaConstants.primaryColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ✅ CORREGIDO: Banner limpio en lugar del horrible azul
-            CleanInfoCard(
-              icon: Icons.info_outlined,
-              title: "Información del diagnóstico",
-              description: "Detalles completos sobre tu diagnóstico principal, evolución médica y recomendaciones del especialista.",
-            ),
+      backgroundColor: HistoryRepository.backgroundColor,
 
-            // Información principal del diagnóstico
-            _buildDiagnosticCard(),
-            
-            const SizedBox(height: 20),
-            
-            // Indicadores y métricas
-            _buildIndicatorsSection(),
-            
-            const SizedBox(height: 20),
-            
-            // Evolución y tendencias
-            _buildEvolutionSection(),
-            
-            const SizedBox(height: 20),
-            
-            // Acciones y recomendaciones
-            _buildActionsSection(context),
-          ],
+      body: SafeArea(
+        child: Container(
+          color: const Color(0xFFF8FCFF),
+          child: Column(
+            children: [
+               StandardPageHeader(
+                  title: "Diagnóstico", 
+                  subtitle: diagnostico["nombre"] ?? "Detalle médico",
+                  imagePath: "assets/images/ilustracion_historia_clinica.png", 
+                  isLarge: false,
+               ),
+               Expanded(
+                 child: ListView(
+                   padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16),
+                   children: [
+                      // Información principal del diagnóstico
+                      _buildDiagnosticCard(),
+                      
+                      const SizedBox(height: 20),
+                      
+                      // Indicadores y métricas
+                      _buildIndicatorsSection(),
+                      
+                      const SizedBox(height: 20),
+                      
+                      // Evolución y tendencias
+                      _buildEvolutionSection(),
+                      
+                      const SizedBox(height: 20),
+                      
+                      // Acciones y recomendaciones
+                      _buildActionsSection(context),
+                      
+                      const SizedBox(height: 20), 
+                   ],
+                 ),
+               ),
+            ],
+          ),
         ),
       ),
     );
@@ -1120,14 +91,14 @@ class DiagnosticoDetailScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: HistoriaClinicaConstants.primaryColor.withOpacity(0.1),
+                    color: HistoryRepository.primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     diagnostico["codigo"] ?? "N/A",
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: HistoriaClinicaConstants.primaryColor,
+                      color: HistoryRepository.primaryColor,
                       fontSize: 14,
                     ),
                   ),
@@ -1142,7 +113,7 @@ class DiagnosticoDetailScreen extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: HistoriaClinicaConstants.darkBlue,
+                color: HistoryRepository.darkBlue,
               ),
             ),
             const SizedBox(height: 12),
@@ -1150,7 +121,7 @@ class DiagnosticoDetailScreen extends StatelessWidget {
               diagnostico["descripcion"] ?? "Sin descripción disponible",
               style: const TextStyle(
                 fontSize: 15,
-                color: HistoriaClinicaConstants.mediumGray,
+                color: HistoryRepository.mediumGray,
                 height: 1.4,
               ),
             ),
@@ -1183,12 +154,12 @@ class DiagnosticoDetailScreen extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16), // 6->8, 12->16 (8pt)
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16), // 12->16 (8pt)
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
       child: Text(
         status,
         style: TextStyle(
@@ -1219,7 +190,7 @@ class DiagnosticoDetailScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: HistoriaClinicaConstants.primaryColor,
+                color: HistoryRepository.primaryColor,
               ),
             ),
             const SizedBox(height: 16),
@@ -1251,7 +222,7 @@ class DiagnosticoDetailScreen extends StatelessWidget {
         break;
       default:
         icon = Icons.analytics;
-        color = HistoriaClinicaConstants.primaryColor;
+        color = HistoryRepository.primaryColor;
     }
 
     return Padding(
@@ -1275,13 +246,13 @@ class DiagnosticoDetailScreen extends StatelessWidget {
                   _formatKey(key),
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: HistoriaClinicaConstants.darkBlue,
+                    color: HistoryRepository.darkBlue,
                   ),
                 ),
                 Text(
                   value,
                   style: const TextStyle(
-                    color: HistoriaClinicaConstants.mediumGray,
+                    color: HistoryRepository.mediumGray,
                     fontSize: 14,
                   ),
                 ),
@@ -1323,7 +294,7 @@ class DiagnosticoDetailScreen extends StatelessWidget {
               children: [
                 const Icon(
                   Icons.trending_up,
-                  color: HistoriaClinicaConstants.primaryColor,
+                  color: HistoryRepository.primaryColor,
                   size: 24,
                 ),
                 const SizedBox(width: 8),
@@ -1332,7 +303,7 @@ class DiagnosticoDetailScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: HistoriaClinicaConstants.primaryColor,
+                    color: HistoryRepository.primaryColor,
                   ),
                 ),
               ],
@@ -1351,7 +322,7 @@ class DiagnosticoDetailScreen extends StatelessWidget {
             const Text(
               "70% de mejora desde el diagnóstico inicial",
               style: TextStyle(
-                color: HistoriaClinicaConstants.mediumGray,
+                color: HistoryRepository.mediumGray,
                 fontSize: 14,
               ),
             ),
@@ -1402,7 +373,7 @@ class DiagnosticoDetailScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: HistoriaClinicaConstants.primaryColor,
+                color: HistoryRepository.primaryColor,
               ),
             ),
             const SizedBox(height: 16),
@@ -1410,7 +381,7 @@ class DiagnosticoDetailScreen extends StatelessWidget {
             _buildActionButton(
               "Solicitar nuevo turno",
               Icons.calendar_today,
-              HistoriaClinicaConstants.primaryColor,
+              HistoryRepository.primaryColor,
               () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Redirigiendo a solicitud de turnos...")),
@@ -1437,9 +408,23 @@ class DiagnosticoDetailScreen extends StatelessWidget {
               "Descargar informe",
               Icons.download,
               Colors.orange,
-              () {
+              () async {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Generando informe PDF...")),
+                );
+                final user = FirebaseAuth.instance.currentUser;
+                await PdfService().generateAndPrintClinicalHistory(
+                  user?.displayName ?? "Paciente Zanoo",
+                  "12.345.678", // Mock DNI for demo
+                  [
+                    {
+                      'date': DateTime.now().toString().substring(0,10),
+                      'title': diagnostico['nombre'].toString(),
+                      'description': diagnostico['descripcion'].toString()
+                    },
+                    // Add some mock history context
+                    {'date': '01/01/2025', 'title': 'Consulta Inicial', 'description': 'Evaluación general.'},
+                  ]
                 );
               },
             ),
@@ -1485,15 +470,15 @@ class DiagnosticoDetailScreen extends StatelessWidget {
               "$label:",
               style: const TextStyle(
                 fontWeight: FontWeight.w600,
-                color: HistoriaClinicaConstants.mediumGray,
+                color: HistoryRepository.mediumGray,
               ),
             ),
           ),
           Expanded(
             child: Text(
-              value,
+              value ?? "No especificado",
               style: const TextStyle(
-                color: HistoriaClinicaConstants.darkBlue,
+                color: HistoryRepository.darkBlue,
               ),
             ),
           ),
@@ -1509,61 +494,72 @@ class TurnosDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: HistoriaClinicaConstants.backgroundColor,
-      appBar: AppBar(
-        leading: BackButton(color: HistoriaClinicaConstants.primaryColor),
-        title: const Text(
-          'Historial de Turnos',
-          style: TextStyle(
-            color: HistoriaClinicaConstants.primaryColor,
-            fontWeight: FontWeight.bold,
+      backgroundColor: HistoryRepository.backgroundColor,
+
+      body: SafeArea(
+        child: Container(
+          color: const Color(0xFFF8FCFF), // Consistent background
+          child: Column(
+            children: [
+               Stack(
+                 children: [
+                   const StandardPageHeader(
+                      title: "Historial de Turnos", 
+                      subtitle: "Tus visitas y controles",
+                      imagePath: "assets/images/ilustracion_historia_clinica.png", 
+                      isLarge: false,
+                   ),
+                   Positioned(
+                     top: 24, 
+                     right: 16,
+                     child: GestureDetector(
+                       onTap: () => _showFilterDialog(context),
+                       child: Container(
+                         padding: const EdgeInsets.all(8),
+                         decoration: BoxDecoration(
+                           color: Colors.white.withOpacity(0.9),
+                           shape: BoxShape.circle,
+                           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+                         ),
+                         child: const Icon(Icons.filter_list, color: HistoryRepository.primaryColor, size: 24),
+                       ),
+                     ),
+                   )
+                 ],
+               ),
+               Expanded(
+                 child: ListView(
+                   padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16),
+                   children: [
+                     // Estadísticas rápidas
+                     _buildStatsCards(),
+                     
+                     const SizedBox(height: 20),
+          
+                     // Lista de turnos
+                     ...HistoryRepository.turnosMock.map((turno) => 
+                       EnhancedTurnoTile(
+                         turno: turno,
+                         onTap: () => _showTurnoDetail(context, turno),
+                       )
+                     ).toList(),
+                   ],
+                 ),
+               ),
+            ],
           ),
         ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            color: HistoriaClinicaConstants.primaryColor,
-            onPressed: () => _showFilterDialog(context),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(18.0),
-        children: [
-          // ✅ CORREGIDO: Banner limpio en lugar del horrible cyan
-          CleanInfoCard(
-            icon: Icons.event_note_outlined,
-            title: "Historial de turnos",
-            description: "Registro completo de tus citas médicas, estados de asistencia y observaciones del profesional.",
-          ),
-
-          // Estadísticas rápidas
-          _buildStatsCards(),
-          
-          const SizedBox(height: 20),
-
-          // Lista de turnos
-          ...HistoriaClinicaConstants.turnosMock.map((turno) => 
-            EnhancedTurnoTile(
-              turno: turno,
-              onTap: () => _showTurnoDetail(context, turno),
-            )
-          ).toList(),
-        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        // ✅ CORREGIDO: Ahora navega a SacarTurnoScreen en lugar de SnackBar fake
         onPressed: () {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const SacarTurnoScreen()),
           );
         },
-        backgroundColor: HistoriaClinicaConstants.primaryColor,
-        label: const Text("Nuevo turno"),
-        icon: const Icon(Icons.add),
+        backgroundColor: HistoryRepository.primaryColor,
+        label: const Text("Nuevo turno", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        icon: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
@@ -1574,16 +570,16 @@ class TurnosDetailScreen extends StatelessWidget {
         Expanded(
           child: _buildStatCard(
             "Total",
-            "${HistoriaClinicaConstants.turnosMock.length}",
+            "${HistoryRepository.turnosMock.length}",
             Icons.event,
-            HistoriaClinicaConstants.primaryColor,
+            HistoryRepository.primaryColor,
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: _buildStatCard(
             "Realizados",
-            "${HistoriaClinicaConstants.turnosMock.where((t) => t['estado'] == 'Realizado').length}",
+            "${HistoryRepository.turnosMock.where((t) => t['estado'] == 'Realizado').length}",
             Icons.check_circle,
             Colors.green,
           ),
@@ -1592,7 +588,7 @@ class TurnosDetailScreen extends StatelessWidget {
         Expanded(
           child: _buildStatCard(
             "Próximos",
-            "${HistoriaClinicaConstants.turnosMock.where((t) => t['estado'] == 'Próximo').length}",
+            "${HistoryRepository.turnosMock.where((t) => t['estado'] == 'Próximo').length}",
             Icons.schedule,
             Colors.orange,
           ),
@@ -1606,13 +602,13 @@ class TurnosDetailScreen extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16), // 12 -> 16
         border: Border.all(color: color.withOpacity(0.2)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            blurRadius: 16, // 8 -> 16
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -1632,7 +628,7 @@ class TurnosDetailScreen extends StatelessWidget {
             label,
             style: const TextStyle(
               fontSize: 12,
-              color: HistoriaClinicaConstants.mediumGray,
+              color: HistoryRepository.mediumGray,
             ),
           ),
         ],
@@ -1660,6 +656,19 @@ class TurnosDetailScreen extends StatelessWidget {
             ListTile(
               title: const Text("Solo próximos"),
               leading: Radio(value: "proximos", groupValue: "todos", onChanged: (_) {}),
+            ),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Text("Por Profesional", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+             ListTile(
+              title: const Text("Dra. Pérez"),
+              leading: Radio(value: "perez", groupValue: "todos", onChanged: (_) {}),
+            ),
+             ListTile(
+              title: const Text("Dr. Ledesma"),
+              leading: Radio(value: "ledesma", groupValue: "todos", onChanged: (_) {}),
             ),
           ],
         ),
@@ -1695,13 +704,15 @@ class EnhancedTurnoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+    return BouncingCard(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16), // 12 -> 16
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 16, offset: const Offset(0, 4))],
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -1713,7 +724,7 @@ class EnhancedTurnoTile extends StatelessWidget {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: _getEstadoColor().withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12), // 8 -> 12
                     ),
                     child: Icon(
                       _getEstadoIcon(),
@@ -1721,7 +732,7 @@ class EnhancedTurnoTile extends StatelessWidget {
                       size: 20,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 16), // 12 -> 16
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1731,13 +742,13 @@ class EnhancedTurnoTile extends StatelessWidget {
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
-                            color: HistoriaClinicaConstants.darkBlue,
+                            color: HistoryRepository.darkBlue,
                           ),
                         ),
                         Text(
                           "${turno["hora"]} • ${turno["profesional"]}",
                           style: const TextStyle(
-                            color: HistoriaClinicaConstants.mediumGray,
+                            color: HistoryRepository.mediumGray,
                             fontSize: 14,
                           ),
                         ),
@@ -1805,7 +816,7 @@ class EnhancedTurnoTile extends StatelessWidget {
       case "Próximo":
         return Colors.orange;
       case "Pendiente":
-        return HistoriaClinicaConstants.primaryColor;
+        return HistoryRepository.primaryColor;
       default:
         return Colors.grey;
     }
@@ -1867,12 +878,12 @@ class TurnoDetailBottomSheet extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: HistoriaClinicaConstants.primaryColor.withOpacity(0.1),
+                  color: HistoryRepository.primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   Icons.event_note,
-                  color: HistoriaClinicaConstants.primaryColor,
+                  color: HistoryRepository.primaryColor,
                   size: 24,
                 ),
               ),
@@ -1886,13 +897,13 @@ class TurnoDetailBottomSheet extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: HistoriaClinicaConstants.darkBlue,
+                        color: HistoryRepository.darkBlue,
                       ),
                     ),
                     Text(
                       turno["fecha"] ?? "",
                       style: const TextStyle(
-                        color: HistoriaClinicaConstants.mediumGray,
+                        color: HistoryRepository.mediumGray,
                       ),
                     ),
                   ],
@@ -1908,6 +919,8 @@ class TurnoDetailBottomSheet extends StatelessWidget {
           _buildDetailRow("Hora", turno["hora"]),
           _buildDetailRow("Profesional", turno["profesional"]),
           _buildDetailRow("Especialidad", turno["especialidad"]),
+          _buildDetailRow("Lugar", "Consultorio 4, Piso 2"), // Added
+          _buildDetailRow("Dirección", "Av. San Martín 1234"), // Added
           _buildDetailRow("Estado", turno["estado"]),
           
           if (turno["motivo"] != null)
@@ -1922,7 +935,7 @@ class TurnoDetailBottomSheet extends StatelessWidget {
               "Observaciones:",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: HistoriaClinicaConstants.primaryColor,
+                color: HistoryRepository.primaryColor,
               ),
             ),
             const SizedBox(height: 8),
@@ -1936,7 +949,7 @@ class TurnoDetailBottomSheet extends StatelessWidget {
               child: Text(
                 turno["observaciones"],
                 style: const TextStyle(
-                  color: HistoriaClinicaConstants.mediumGray,
+                  color: HistoryRepository.mediumGray,
                   fontSize: 14,
                 ),
               ),
@@ -1947,6 +960,55 @@ class TurnoDetailBottomSheet extends StatelessWidget {
           
           // Acciones
           if (turno["estado"] == "Próximo") ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  // PREMIUM LOCK
+                  if (!PremiumAccessHelper.canAccessFeature()) {
+                     PremiumAccessHelper.showPremiumDialog(context, "Video Consultas");
+                     return;
+                  }
+
+                  final Uri url = Uri.parse('https://meet.jit.si/Zanoo_Consulta_Patient');
+                  try {
+                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error al abrir sala virtual")));
+                  }
+                },
+                icon: const Icon(Icons.video_camera_front_rounded),
+                label: const Text("Entrar a Sala Virtual"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16), // Prominent
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 4,
+                  shadowColor: Colors.purple.withOpacity(0.4),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  // Mock Calendar Action
+                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Agregado al calendario")));
+                },
+                icon: const Icon(Icons.calendar_today_rounded, size: 18),
+                label: const Text("Agendar en Calendario"),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  side: BorderSide(color: HistoryRepository.primaryColor),
+                  foregroundColor: HistoryRepository.primaryColor,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -2001,7 +1063,7 @@ class TurnoDetailBottomSheet extends StatelessWidget {
               icon: const Icon(Icons.close),
               label: const Text("Cerrar"),
               style: OutlinedButton.styleFrom(
-                foregroundColor: HistoriaClinicaConstants.primaryColor,
+                foregroundColor: HistoryRepository.primaryColor,
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
@@ -2023,7 +1085,7 @@ class TurnoDetailBottomSheet extends StatelessWidget {
               "$label:",
               style: const TextStyle(
                 fontWeight: FontWeight.w600,
-                color: HistoriaClinicaConstants.mediumGray,
+                color: HistoryRepository.mediumGray,
               ),
             ),
           ),
@@ -2031,7 +1093,7 @@ class TurnoDetailBottomSheet extends StatelessWidget {
             child: Text(
               value?.toString() ?? "N/A",
               style: const TextStyle(
-                color: HistoriaClinicaConstants.darkBlue,
+                color: HistoryRepository.darkBlue,
               ),
             ),
           ),
@@ -2055,104 +1117,71 @@ class _MedicamentosDetailScreenState extends State<MedicamentosDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: HistoriaClinicaConstants.backgroundColor,
-      appBar: AppBar(
-        leading: BackButton(color: HistoriaClinicaConstants.primaryColor),
-        title: const Text(
-          'Medicamentos',
-          style: TextStyle(
-            color: HistoriaClinicaConstants.primaryColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            color: HistoriaClinicaConstants.primaryColor,
-            onPressed: () => _showAddMedicationDialog(),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Banner informativo mejorado
-          Container(
-            margin: const EdgeInsets.all(16), // Reducido de 18 a 16
-            padding: const EdgeInsets.all(14), // Reducido de 16 a 14
-            decoration: BoxDecoration(
-              color: HistoriaClinicaConstants.accentColor,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: const [
-                Icon(Icons.medical_services, color: Colors.white, size: 24), // Reducido de 28 a 24
-                SizedBox(width: 12), // Reducido de 16 a 12
+      backgroundColor: HistoryRepository.backgroundColor,
+      body: SafeArea(
+        child: Container(
+          color: const Color(0xFFF8FCFF),
+          child: Column(
+             children: [
                 Expanded(
-                  child: Text(
-                    "Gestión completa de tu medicación actual, historial y pedidos.",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14, // Reducido de 15 a 14
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
 
-          // Filtros y búsqueda mejorados
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16), // Reducido de 18 a 16
-            child: Column(
-              children: [
-                // Barra de búsqueda
-                TextField(
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search, size: 20), // Reducido tamaño de ícono
-                    hintText: "Buscar medicamentos...",
-                    hintStyle: const TextStyle(fontSize: 14), // Agregado tamaño de fuente
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12), // Reducido padding
-                  ),
-                  style: const TextStyle(fontSize: 14), // Agregado tamaño de fuente
-                  onChanged: (value) => setState(() => _busqueda = value),
-                ),
-                
-                const SizedBox(height: 10), // Reducido de 12 a 10
-                
-                // Filtros
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildFilterChip("Todos", "todos"),
-                      _buildFilterChip("Activos", "activos"),
-                      _buildFilterChip("Con alertas", "alertas"),
-                      _buildFilterChip("Próximos a vencer", "vencimiento"),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 14), // Reducido de 16 a 14
-
-          // Lista de medicamentos
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16), // Reducido de 18 a 16
-              itemCount: _medicamentosFiltrados.length,
+              itemCount: _medicamentosFiltrados.length + 2, // +2 for header items
               itemBuilder: (context, index) {
-                final medicamento = _medicamentosFiltrados[index];
+                if (index == 0) {
+                  return const StandardPageHeader(
+                    title: "Medicamentos",
+                    subtitle: "Gestioná tu medicación",
+                    imagePath: "assets/images/ilustracion_mis_recetas.png",
+                    isLarge: false,
+                  );
+                }
+
+                
+                if (index == 1) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0).copyWith(bottom: 14),
+                    child: Column(
+                      children: [
+                        TextField(
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            hintText: "Buscar medicamentos...",
+                            hintStyle: const TextStyle(fontSize: 14),
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          ),
+                          style: const TextStyle(fontSize: 14),
+                          onChanged: (value) => setState(() => _busqueda = value),
+                        ),
+                        const SizedBox(height: 10),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _buildFilterChip("Todos", "todos"),
+                              _buildFilterChip("Activos", "activos"),
+                              _buildFilterChip("Con alertas", "alertas"),
+                              _buildFilterChip("Próximos", "vencimiento"),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                // Medicamentos list items
+                final medicamentoIndex = index - 2;
+                if (medicamentoIndex < 0 || medicamentoIndex >= _medicamentosFiltrados.length) return const SizedBox.shrink();
+                
+                final medicamento = _medicamentosFiltrados[medicamentoIndex];
                 return EnhancedMedicamentoTile(
                   medicamento: medicamento,
                   onTap: () => _showMedicamentoDetail(medicamento),
@@ -2162,11 +1191,13 @@ class _MedicamentosDetailScreenState extends State<MedicamentosDetailScreen> {
           ),
         ],
       ),
-    );
+    ),
+  ),
+);
   }
 
   List<Map<String, dynamic>> get _medicamentosFiltrados {
-    var lista = HistoriaClinicaConstants.medicamentosMock;
+    var lista = HistoryRepository.medicamentosMock;
     
     // Aplicar filtro
     switch (_filtro) {
@@ -2202,10 +1233,10 @@ class _MedicamentosDetailScreenState extends State<MedicamentosDetailScreen> {
         selected: isSelected,
         onSelected: (selected) => setState(() => _filtro = value),
         backgroundColor: Colors.white,
-        selectedColor: HistoriaClinicaConstants.primaryColor.withOpacity(0.2),
+        selectedColor: HistoryRepository.primaryColor.withOpacity(0.2),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), // Agregado padding más compacto
         labelStyle: TextStyle(
-          color: isSelected ? HistoriaClinicaConstants.primaryColor : HistoriaClinicaConstants.mediumGray,
+          color: isSelected ? HistoryRepository.primaryColor : HistoryRepository.mediumGray,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           fontSize: 12, // Reducido tamaño de fuente
         ),
@@ -2257,33 +1288,40 @@ class EnhancedMedicamentoTile extends StatelessWidget {
     final alertas = medicamento["alertas"] as List;
     final hasAlertas = alertas.isNotEmpty;
 
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.only(bottom: 10), // Reducido de 12 a 10
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(14), // Reducido de 16 a 14
-          child: Column(
+    return BouncingCard(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12), // 10 -> 12
+        padding: const EdgeInsets.all(16), // 14 -> 16
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(6), // Reducido de 8 a 6
+                    padding: const EdgeInsets.all(8), // 6 -> 8
                     decoration: BoxDecoration(
-                      color: HistoriaClinicaConstants.primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      color: HistoryRepository.primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12), // 8 -> 12
                     ),
                     child: Icon(
                       Icons.medication,
-                      color: HistoriaClinicaConstants.primaryColor,
-                      size: 18, // Reducido de 20 a 18
+                      color: HistoryRepository.primaryColor,
+                      size: 20, // 18 -> 20
                     ),
                   ),
-                  const SizedBox(width: 10), // Reducido de 12 a 10
+                  const SizedBox(width: 16), // 10 -> 16
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2292,15 +1330,15 @@ class EnhancedMedicamentoTile extends StatelessWidget {
                           medicamento["nombre"] ?? "",
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 14, // Reducido de 16 a 14
-                            color: HistoriaClinicaConstants.darkBlue,
+                            fontSize: 16, // 14 -> 16
+                            color: HistoryRepository.darkBlue,
                           ),
                         ),
                         Text(
                           medicamento["indicacion"] ?? "",
                           style: const TextStyle(
-                            color: HistoriaClinicaConstants.mediumGray,
-                            fontSize: 12, // Reducido de 14 a 12
+                            color: HistoryRepository.mediumGray,
+                            fontSize: 13, // 12 -> 13
                           ),
                         ),
                       ],
@@ -2308,14 +1346,14 @@ class EnhancedMedicamentoTile extends StatelessWidget {
                   ),
                   if (hasAlertas)
                     Icon(
-                      Icons.warning,
+                      Icons.warning_rounded,
                       color: Colors.orange,
-                      size: 18, // Reducido de 20 a 18
+                      size: 20, // 18 -> 20
                     ),
                 ],
               ),
               
-              const SizedBox(height: 10), // Reducido de 12 a 10
+              const SizedBox(height: 12), // 10 -> 12
               
               // Información adicional
               Row(
@@ -2325,7 +1363,7 @@ class EnhancedMedicamentoTile extends StatelessWidget {
                     medicamento["categoria"] ?? "",
                     Colors.blue,
                   ),
-                  const SizedBox(width: 6), // Reducido de 8 a 6
+                  const SizedBox(width: 8), // 6 -> 8
                   _buildInfoChip(
                     Icons.person,
                     medicamento["medico"] ?? "",
@@ -2334,23 +1372,23 @@ class EnhancedMedicamentoTile extends StatelessWidget {
                 ],
               ),
               
-              const SizedBox(height: 6), // Reducido de 8 a 6
+              const SizedBox(height: 8), // 6 -> 8
               
               // Pedidos y órdenes
               Row(
                 children: [
-                  Icon(Icons.shopping_cart, size: 14, color: Colors.orange[800]), // Reducido de 16 a 14
-                  const SizedBox(width: 3), // Reducido de 4 a 3
+                  Icon(Icons.shopping_cart, size: 16, color: Colors.orange[800]), // 14 -> 16
+                  const SizedBox(width: 4), // 3 -> 4
                   Text(
                     "${medicamento["pedidos"]} pedidos",
-                    style: TextStyle(fontSize: 11, color: Colors.orange[800]), // Reducido de 12 a 11
+                    style: TextStyle(fontSize: 12, color: Colors.orange[800]), // 11 -> 12
                   ),
-                  const SizedBox(width: 12), // Reducido de 16 a 12
-                  Icon(Icons.receipt_long, size: 14, color: Colors.teal[700]), // Reducido de 16 a 14
-                  const SizedBox(width: 3), // Reducido de 4 a 3
+                  const SizedBox(width: 16), // 12 -> 16
+                  Icon(Icons.receipt_long, size: 16, color: Colors.teal[700]), // 14 -> 16
+                  const SizedBox(width: 4), // 3 -> 4
                   Text(
                     "${medicamento["ordenes"]} órdenes",
-                    style: TextStyle(fontSize: 11, color: Colors.teal[700]), // Reducido de 12 a 11
+                    style: TextStyle(fontSize: 12, color: Colors.teal[700]), // 11 -> 12
                   ),
                 ],
               ),
@@ -2361,13 +1399,13 @@ class EnhancedMedicamentoTile extends StatelessWidget {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8), // 6 -> 8
                     border: Border.all(color: Colors.orange.withOpacity(0.3)),
                   ),
                   child: Row(
                     children: [
                       Icon(Icons.warning, color: Colors.orange, size: 16),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8), // 6 -> 8
                       Expanded(
                         child: Text(
                           alertas.first,
@@ -2384,7 +1422,6 @@ class EnhancedMedicamentoTile extends StatelessWidget {
               ],
             ],
           ),
-        ),
       ),
     );
   }
@@ -2461,12 +1498,12 @@ class MedicamentoDetailBottomSheet extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: HistoriaClinicaConstants.primaryColor.withOpacity(0.1),
+                        color: HistoryRepository.primaryColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
                         Icons.medication,
-                        color: HistoriaClinicaConstants.primaryColor,
+                        color: HistoryRepository.primaryColor,
                         size: 28,
                       ),
                     ),
@@ -2480,13 +1517,13 @@ class MedicamentoDetailBottomSheet extends StatelessWidget {
                             style: const TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: HistoriaClinicaConstants.darkBlue,
+                              color: HistoryRepository.darkBlue,
                             ),
                           ),
                           Text(
                             medicamento["principioActivo"] ?? "",
                             style: const TextStyle(
-                              color: HistoriaClinicaConstants.mediumGray,
+                              color: HistoryRepository.mediumGray,
                               fontSize: 14,
                             ),
                           ),
@@ -2546,7 +1583,7 @@ class MedicamentoDetailBottomSheet extends StatelessWidget {
           style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: HistoriaClinicaConstants.primaryColor,
+            color: HistoryRepository.primaryColor,
           ),
         ),
         const SizedBox(height: 12),
@@ -2575,7 +1612,7 @@ class MedicamentoDetailBottomSheet extends StatelessWidget {
               "$label:",
               style: const TextStyle(
                 fontWeight: FontWeight.w600,
-                color: HistoriaClinicaConstants.mediumGray,
+                color: HistoryRepository.mediumGray,
                 fontSize: 14,
               ),
             ),
@@ -2584,7 +1621,7 @@ class MedicamentoDetailBottomSheet extends StatelessWidget {
             child: Text(
               value?.toString() ?? "N/A",
               style: const TextStyle(
-                color: HistoriaClinicaConstants.darkBlue,
+                color: HistoryRepository.darkBlue,
                 fontSize: 14,
               ),
             ),
@@ -2686,7 +1723,7 @@ class MedicamentoDetailBottomSheet extends StatelessWidget {
             icon: const Icon(Icons.receipt),
             label: const Text("Solicitar receta"),
             style: ElevatedButton.styleFrom(
-              backgroundColor: HistoriaClinicaConstants.primaryColor,
+              backgroundColor: HistoryRepository.primaryColor,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
@@ -2750,7 +1787,7 @@ class MedicamentoDetailBottomSheet extends StatelessWidget {
             icon: const Icon(Icons.alarm),
             label: const Text("Programar recordatorio"),
             style: OutlinedButton.styleFrom(
-              foregroundColor: HistoriaClinicaConstants.primaryColor,
+              foregroundColor: HistoryRepository.primaryColor,
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
           ),
@@ -2765,7 +1802,7 @@ class MedicamentoDetailBottomSheet extends StatelessWidget {
             icon: const Icon(Icons.close),
             label: const Text("Cerrar"),
             style: TextButton.styleFrom(
-              foregroundColor: HistoriaClinicaConstants.mediumGray,
+              foregroundColor: HistoryRepository.mediumGray,
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
           ),
@@ -2788,13 +1825,13 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: HistoriaClinicaConstants.backgroundColor,
+      backgroundColor: HistoryRepository.backgroundColor,
       appBar: AppBar(
-        leading: BackButton(color: HistoriaClinicaConstants.primaryColor),
+        leading: BackButton(color: HistoryRepository.primaryColor),
         title: const Text(
           'Signos Vitales',
           style: TextStyle(
-            color: HistoriaClinicaConstants.primaryColor,
+            color: HistoryRepository.primaryColor,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -2803,42 +1840,40 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            color: HistoriaClinicaConstants.primaryColor,
+            color: HistoryRepository.primaryColor,
             onPressed: () => _showAddVitalSignDialog(),
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ✅ CORREGIDO: Banner limpio en lugar del HORRIBLE gradiente
-            CleanInfoCard(
-              icon: Icons.favorite_outlined,
-              title: "Monitoreo de signos vitales",
-              description: "Seguimiento completo de tus parámetros de salud, tendencias y alertas médicas importantes.",
-            ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          CleanInfoCard(
+            icon: Icons.favorite_outlined,
+            title: "Monitoreo de signos vitales",
+            description: "Seguimiento completo de tus parámetros de salud, tendencias y alertas médicas importantes.",
+          ),
 
-            // Selector de período
-            _buildPeriodSelector(),
-            
-            const SizedBox(height: 20),
+          // Selector de período
+          _buildPeriodSelector(),
+          
+          const SizedBox(height: 20),
 
-            // Resumen actual
-            _buildCurrentSummary(),
-            
-            const SizedBox(height: 20),
+          // Resumen actual
+          _buildCurrentSummary(),
+          
+          const SizedBox(height: 20),
 
-            // Gráficos de tendencias (simulados)
-            _buildTrendsSection(),
-            
-            const SizedBox(height: 20),
+          // Gráficos de tendencias (simulados)
+          _buildTrendsSection(),
+          
+          const SizedBox(height: 20),
 
-            // Historial detallado
-            _buildHistorySection(),
-          ],
-        ),
+          // Historial detallado
+          _buildHistorySection(),
+          
+          const SizedBox(height: 20), // Extra padding
+        ],
       ),
     );
   }
@@ -2855,7 +1890,7 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
               "Período de visualización",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: HistoriaClinicaConstants.darkBlue,
+                color: HistoryRepository.darkBlue,
               ),
             ),
             const SizedBox(height: 12),
@@ -2885,9 +1920,9 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
         selected: isSelected,
         onSelected: (selected) => setState(() => _periodoSeleccionado = value),
         backgroundColor: Colors.grey.shade100,
-        selectedColor: HistoriaClinicaConstants.primaryColor.withOpacity(0.2),
+        selectedColor: HistoryRepository.primaryColor.withOpacity(0.2),
         labelStyle: TextStyle(
-          color: isSelected ? HistoriaClinicaConstants.primaryColor : HistoriaClinicaConstants.mediumGray,
+          color: isSelected ? HistoryRepository.primaryColor : HistoryRepository.mediumGray,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         ),
       ),
@@ -2895,7 +1930,7 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
   }
 
   Widget _buildCurrentSummary() {
-    final ultimoRegistro = HistoriaClinicaConstants.signosVitalesMock.first;
+    final ultimoRegistro = HistoryRepository.signosVitalesMock.first;
     
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -2916,7 +1951,7 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
                   "Último registro",
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: HistoriaClinicaConstants.darkBlue,
+                    color: HistoryRepository.darkBlue,
                     fontSize: 16,
                   ),
                 ),
@@ -2924,7 +1959,7 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
                 Text(
                   ultimoRegistro["fecha"],
                   style: const TextStyle(
-                    color: HistoriaClinicaConstants.mediumGray,
+                    color: HistoryRepository.mediumGray,
                     fontSize: 14,
                   ),
                 ),
@@ -3017,7 +2052,7 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
             label,
             style: const TextStyle(
               fontSize: 11,
-              color: HistoriaClinicaConstants.mediumGray,
+              color: HistoryRepository.mediumGray,
             ),
             textAlign: TextAlign.center,
           ),
@@ -3038,7 +2073,7 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
               "Tendencias",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: HistoriaClinicaConstants.darkBlue,
+                color: HistoryRepository.darkBlue,
                 fontSize: 16,
               ),
             ),
@@ -3046,41 +2081,118 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
             const SizedBox(height: 20),
             
             // Simulación de gráfico de presión arterial
-            Container(
-              height: 200,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.show_chart,
-                      size: 48,
-                      color: Colors.grey.shade400,
+            // Real LineChart for Blood Pressure
+            AspectRatio(
+              aspectRatio: 1.70,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 18.0, left: 12.0, top: 24, bottom: 12),
+                child: LineChart(
+                  LineChartData(
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: true,
+                      getDrawingHorizontalLine: (value) {
+                        return FlLine(color: const Color(0xff37434d), strokeWidth: 0.5);
+                      },
+                      getDrawingVerticalLine: (value) {
+                        return FlLine(color: const Color(0xff37434d), strokeWidth: 0.5);
+                      },
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Gráfico de tendencias de presión arterial",
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 14,
+                    titlesData: FlTitlesData(
+                      show: true,
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 30,
+                          getTitlesWidget: (value, meta) {
+                             // Simple index-based date mapping logic
+                             // Reverse list to show oldest to newest
+                             final sorted = List.from(HistoryRepository.signosVitalesMock.reversed);
+                             if (value.toInt() >= 0 && value.toInt() < sorted.length) {
+                               return Padding(
+                                 padding: const EdgeInsets.only(top: 8.0),
+                                 child: Text(
+                                   sorted[value.toInt()]["fecha"].substring(0,5), // "DD/MM"
+                                   style: const TextStyle(color: Color(0xff68737d), fontWeight: FontWeight.bold, fontSize: 10),
+                                 ),
+                               );
+                             }
+                             return const Text('');
+                          },
+                          interval: 1,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Funcionalidad en desarrollo",
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 12,
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          getTitlesWidget: (value, meta) {
+                            return Text(
+                              value.toInt().toString(),
+                              style: const TextStyle(
+                                color: Color(0xff67727d),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                              textAlign: TextAlign.left,
+                            );
+                          },
+                          reservedSize: 40,
+                          interval: 20,
+                        ),
                       ),
+                      topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     ),
-                  ],
+                    borderData: FlBorderData(
+                      show: true,
+                      border: Border.all(color: const Color(0xff37434d), width: 1),
+                    ),
+                    minX: 0,
+                    maxX: (HistoryRepository.signosVitalesMock.length - 1).toDouble(),
+                    minY: 40,
+                    maxY: 180,
+                    lineBarsData: [
+                      // Systolic
+                      LineChartBarData(
+                        spots: HistoryRepository.signosVitalesMock.reversed.toList().asMap().entries.map((e) {
+                          return FlSpot(e.key.toDouble(), (e.value["presionSistolica"] as num).toDouble());
+                        }).toList(),
+                        isCurved: true,
+                        color: Colors.redAccent,
+                        barWidth: 3,
+                        isStrokeCapRound: true,
+                        dotData: FlDotData(show: true),
+                        belowBarData: BarAreaData(show: false),
+                      ),
+                      // Diastolic
+                      LineChartBarData(
+                        spots: HistoryRepository.signosVitalesMock.reversed.toList().asMap().entries.map((e) {
+                          return FlSpot(e.key.toDouble(), (e.value["presionDiastolica"] as num).toDouble());
+                        }).toList(),
+                        isCurved: true,
+                        color: Colors.blueAccent,
+                        barWidth: 3,
+                        isStrokeCapRound: true,
+                        dotData: FlDotData(show: true),
+                        belowBarData: BarAreaData(show: false),
+                      ),
+                    ],
+                  ),
                 ),
               ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(width: 12, height: 12, color: Colors.redAccent),
+                const SizedBox(width: 4),
+                const Text("Sistólica", style: TextStyle(fontSize: 12)),
+                const SizedBox(width: 16),
+                Container(width: 12, height: 12, color: Colors.blueAccent),
+                const SizedBox(width: 4),
+                const Text("Diastólica", style: TextStyle(fontSize: 12)),
+              ],
             ),
           ],
         ),
@@ -3100,14 +2212,14 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
               "Historial detallado",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: HistoriaClinicaConstants.darkBlue,
+                color: HistoryRepository.darkBlue,
                 fontSize: 16,
               ),
             ),
             
             const SizedBox(height: 16),
             
-            ...HistoriaClinicaConstants.signosVitalesMock.map((registro) => 
+            ...HistoryRepository.signosVitalesMock.map((registro) => 
               _buildHistoryItem(registro)
             ).toList(),
           ],
@@ -3133,14 +2245,14 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
               Icon(
                 Icons.calendar_today,
                 size: 16,
-                color: HistoriaClinicaConstants.primaryColor,
+                color: HistoryRepository.primaryColor,
               ),
               const SizedBox(width: 6),
               Text(
                 registro["fecha"],
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: HistoriaClinicaConstants.primaryColor,
+                  color: HistoryRepository.primaryColor,
                 ),
               ),
             ],
@@ -3203,7 +2315,7 @@ class _SignosVitalesScreenState extends State<SignosVitalesScreen> {
 
 // ============== RESUMEN CLÍNICO MEJORADO ==============
 class ResumenDetailScreen extends StatelessWidget {
-  final HistoriaClinicaData data;
+  final MedicalHistoryModel data;
   
   const ResumenDetailScreen({
     Key? key,
@@ -3213,72 +2325,71 @@ class ResumenDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: HistoriaClinicaConstants.backgroundColor,
-      appBar: AppBar(
-        leading: BackButton(color: HistoriaClinicaConstants.primaryColor),
-        title: const Text(
-          'Resumen Clínico',
-          style: TextStyle(
-            color: HistoriaClinicaConstants.primaryColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share),
-            color: HistoriaClinicaConstants.primaryColor,
-            onPressed: () => _shareResumen(context),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Banner de identificación del paciente
-            IdentificationBanner(data: data),
-            
-            const SizedBox(height: 20),
+      backgroundColor: HistoryRepository.backgroundColor,
+      body: SafeArea(
+        child: Container(
+          color: const Color(0xFFF8FCFF),
+          child: Column(
+            children: [
+               StandardPageHeader(
+                 title: "Resumen Clínico",
+                 subtitle: "Historia clínica digital",
+                 imagePath: "assets/images/ilustracion_historia_clinica.png",
+                 isLarge: false,
+                 trailing: IconButton(
+                   icon: const Icon(Icons.share, color: Color(0xFF2376F6)),
+                   onPressed: () => _shareResumen(context),
+                 ),
+               ),
+               Expanded(
+                 child: ListView(
+                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                   children: [
+                     // Banner eliminado (IdentificationBanner)
+          const SizedBox(height: 20),
 
-            // Información principal
-            _buildMainInfoSection(),
-            
-            const SizedBox(height: 20),
+          // Información principal
+          _buildMainInfoSection(),
+          
+          const SizedBox(height: 20),
 
-            // Diagnósticos activos
-            _buildDiagnosticosSection(),
-            
-            const SizedBox(height: 20),
+          // Diagnósticos activos
+          _buildDiagnosticosSection(),
+          
+          const SizedBox(height: 20),
 
-            // Medicación actual
-            _buildMedicacionSection(),
-            
-            const SizedBox(height: 20),
+          // Medicación actual
+          _buildMedicacionSection(),
+          
+          const SizedBox(height: 20),
 
-            // Próximas citas y seguimiento
-            _buildSeguimientoSection(),
-            
-            const SizedBox(height: 20),
+          // Próximas citas y seguimiento
+          _buildSeguimientoSection(),
+          
+          const SizedBox(height: 20),
 
-            // Alertas y recomendaciones
-            _buildAlertasSection(context),
-            
-            const SizedBox(height: 20),
+          // Alertas y recomendaciones
+          _buildAlertasSection(context),
+          
+          const SizedBox(height: 20),
 
-            // Acciones rápidas
-            _buildAccionesRapidas(context),
-            
-            const SizedBox(height: 20),
+          // Acciones rápidas
+          _buildAccionesRapidas(context),
+          
+          const SizedBox(height: 20),
 
-            // Información de actualización
-            _buildUpdateInfo(),
+          // Información de actualización
+          _buildUpdateInfo(),
+          
+                  const SizedBox(height: 20), // Extra padding at bottom
+                ],
+              ),
+            ),
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildMainInfoSection() {
@@ -3295,12 +2406,12 @@ class ResumenDetailScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: HistoriaClinicaConstants.primaryColor.withOpacity(0.1),
+                    color: HistoryRepository.primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
                     Icons.person_rounded,
-                    color: HistoriaClinicaConstants.primaryColor,
+                    color: HistoryRepository.primaryColor,
                     size: 24,
                   ),
                 ),
@@ -3310,7 +2421,7 @@ class ResumenDetailScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: HistoriaClinicaConstants.darkBlue,
+                    color: HistoryRepository.darkBlue,
                   ),
                 ),
               ],
@@ -3361,14 +2472,18 @@ class ResumenDetailScreen extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: HistoriaClinicaConstants.primaryColor),
+              Icon(icon, size: 16, color: HistoryRepository.primaryColor),
               const SizedBox(width: 6),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: HistoriaClinicaConstants.mediumGray,
-                  fontWeight: FontWeight.w500,
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: HistoryRepository.mediumGray,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
             ],
@@ -3379,7 +2494,7 @@ class ResumenDetailScreen extends StatelessWidget {
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
-              color: HistoriaClinicaConstants.darkBlue,
+              color: HistoryRepository.darkBlue,
             ),
           ),
         ],
@@ -3416,7 +2531,7 @@ class ResumenDetailScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: HistoriaClinicaConstants.darkBlue,
+                    color: HistoryRepository.darkBlue,
                   ),
                 ),
               ],
@@ -3425,7 +2540,7 @@ class ResumenDetailScreen extends StatelessWidget {
             const SizedBox(height: 16),
             
             // Lista de diagnósticos
-            ...HistoriaClinicaConstants.diagnosticosMock.map((diag) => 
+            ...HistoryRepository.diagnosticosMock.map((diag) => 
               _buildDiagnosticoItem(diag)
             ).toList(),
           ],
@@ -3451,13 +2566,13 @@ class ResumenDetailScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: HistoriaClinicaConstants.primaryColor.withOpacity(0.1),
+                  color: HistoryRepository.primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   diagnostico["codigo"],
                   style: const TextStyle(
-                    color: HistoriaClinicaConstants.primaryColor,
+                    color: HistoryRepository.primaryColor,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
@@ -3474,7 +2589,7 @@ class ResumenDetailScreen extends StatelessWidget {
             diagnostico["nombre"],
             style: const TextStyle(
               fontWeight: FontWeight.bold,
-              color: HistoriaClinicaConstants.darkBlue,
+              color: HistoryRepository.darkBlue,
             ),
           ),
           
@@ -3483,7 +2598,7 @@ class ResumenDetailScreen extends StatelessWidget {
           Text(
             "Dr. ${diagnostico["medico"]} • ${diagnostico["fechaDiagnostico"]}",
             style: const TextStyle(
-              color: HistoriaClinicaConstants.mediumGray,
+              color: HistoryRepository.mediumGray,
               fontSize: 12,
             ),
           ),
@@ -3551,7 +2666,7 @@ class ResumenDetailScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: HistoriaClinicaConstants.darkBlue,
+                    color: HistoryRepository.darkBlue,
                   ),
                 ),
               ],
@@ -3560,7 +2675,7 @@ class ResumenDetailScreen extends StatelessWidget {
             const SizedBox(height: 16),
             
             // Lista de medicamentos activos
-            ...HistoriaClinicaConstants.medicamentosMock
+            ...HistoryRepository.medicamentosMock
                 .where((med) => med["activo"] == true)
                 .map((med) => _buildMedicamentoResumenItem(med))
                 .toList(),
@@ -3603,13 +2718,13 @@ class ResumenDetailScreen extends StatelessWidget {
                   medicamento["nombre"],
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: HistoriaClinicaConstants.darkBlue,
+                    color: HistoryRepository.darkBlue,
                   ),
                 ),
                 Text(
                   medicamento["indicacion"],
                   style: const TextStyle(
-                    color: HistoriaClinicaConstants.mediumGray,
+                    color: HistoryRepository.mediumGray,
                     fontSize: 12,
                   ),
                 ),
@@ -3644,12 +2759,12 @@ class ResumenDetailScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: HistoriaClinicaConstants.accentColor.withOpacity(0.1),
+                    color: HistoryRepository.accentColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
                     Icons.event_available_rounded,
-                    color: HistoriaClinicaConstants.accentColor,
+                    color: HistoryRepository.accentColor,
                     size: 24,
                   ),
                 ),
@@ -3659,7 +2774,7 @@ class ResumenDetailScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: HistoriaClinicaConstants.darkBlue,
+                    color: HistoryRepository.darkBlue,
                   ),
                 ),
               ],
@@ -3673,18 +2788,18 @@ class ResumenDetailScreen extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    HistoriaClinicaConstants.accentColor.withOpacity(0.1),
-                    HistoriaClinicaConstants.secondaryColor.withOpacity(0.05),
+                    HistoryRepository.accentColor.withOpacity(0.1),
+                    HistoryRepository.secondaryColor.withOpacity(0.05),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: HistoriaClinicaConstants.accentColor.withOpacity(0.3)),
+                border: Border.all(color: HistoryRepository.accentColor.withOpacity(0.3)),
               ),
               child: Row(
                 children: [
                   Icon(
                     Icons.schedule,
-                    color: HistoriaClinicaConstants.accentColor,
+                    color: HistoryRepository.accentColor,
                     size: 20,
                   ),
                   const SizedBox(width: 8),
@@ -3696,14 +2811,14 @@ class ResumenDetailScreen extends StatelessWidget {
                           "Próxima cita médica",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: HistoriaClinicaConstants.darkBlue,
+                            color: HistoryRepository.darkBlue,
                             fontSize: 14,
                           ),
                         ),
                         Text(
                           data.proximaCita,
                           style: TextStyle(
-                            color: HistoriaClinicaConstants.accentColor,
+                            color: HistoryRepository.accentColor,
                             fontSize: 13,
                           ),
                         ),
@@ -3735,7 +2850,7 @@ class ResumenDetailScreen extends StatelessWidget {
                         "Controles recomendados",
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: HistoriaClinicaConstants.darkBlue,
+                          color: HistoryRepository.darkBlue,
                           fontSize: 14,
                         ),
                       ),
@@ -3745,7 +2860,7 @@ class ResumenDetailScreen extends StatelessWidget {
                   const Text(
                     "• Control de presión arterial mensual\n• Análisis de laboratorio trimestral\n• Consulta cardiológica semestral",
                     style: TextStyle(
-                      color: HistoriaClinicaConstants.mediumGray,
+                      color: HistoryRepository.mediumGray,
                       fontSize: 12,
                     ),
                   ),
@@ -3792,7 +2907,7 @@ class ResumenDetailScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: HistoriaClinicaConstants.darkBlue,
+                    color: HistoryRepository.darkBlue,
                   ),
                 ),
               ],
@@ -3811,7 +2926,7 @@ class ResumenDetailScreen extends StatelessWidget {
     List<Map<String, String>> alertas = [];
     
     // Verificar medicamentos con alertas
-    for (var medicamento in HistoriaClinicaConstants.medicamentosMock) {
+    for (var medicamento in HistoryRepository.medicamentosMock) {
       if ((medicamento["alertas"] as List).isNotEmpty) {
         alertas.add({
           "tipo": "medicamento",
@@ -3823,7 +2938,7 @@ class ResumenDetailScreen extends StatelessWidget {
     }
     
     // Verificar diagnósticos activos
-    for (var diagnostico in HistoriaClinicaConstants.diagnosticosMock) {
+    for (var diagnostico in HistoryRepository.diagnosticosMock) {
       if (diagnostico["estado"] == "Activo") {
         alertas.add({
           "tipo": "seguimiento",
@@ -3918,7 +3033,7 @@ class ResumenDetailScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: HistoriaClinicaConstants.darkBlue,
+                color: HistoryRepository.darkBlue,
               ),
             ),
             
@@ -4022,14 +3137,18 @@ class ResumenDetailScreen extends StatelessWidget {
             size: 20,
           ),
           const SizedBox(width: 8),
-          Text(
-            "Última actualización: ${data.fechaActualizacion}",
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 14,
+          Expanded(
+            child: Text(
+              "Última actualización: ${data.fechaActualizacion}",
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 14,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8), // Replaces Spacer
           Icon(
             Icons.verified,
             color: Colors.green,
@@ -4166,28 +3285,28 @@ class _ResumenBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: HistoriaClinicaConstants.cardColor,
+      color: HistoryRepository.cardColor,
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: HistoriaClinicaConstants.primaryColor.withOpacity(0.1),
-          child: Icon(icon, color: HistoriaClinicaConstants.primaryColor),
+          backgroundColor: HistoryRepository.primaryColor.withOpacity(0.1),
+          child: Icon(icon, color: HistoryRepository.primaryColor),
         ),
         title: Text(
           title,
           style: const TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 16,
-            color: HistoriaClinicaConstants.primaryColor,
+            color: HistoryRepository.primaryColor,
           ),
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
             content,
-            style: const TextStyle(fontSize: 15, color: HistoriaClinicaConstants.mediumGray),
+            style: const TextStyle(fontSize: 15, color: HistoryRepository.mediumGray),
           ),
         ),
       ),
@@ -4196,26 +3315,47 @@ class _ResumenBlock extends StatelessWidget {
 }
 
 // ======================= HOME HISTORIA CLÍNICA (PRINCIPAL) ========================
-class HistoriaClinicaScreen extends StatelessWidget {
+class HistoriaClinicaScreen extends StatefulWidget {
   const HistoriaClinicaScreen({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+  State<HistoriaClinicaScreen> createState() => _HistoriaClinicaScreenState();
+}
 
-    if (user == null) {
-      return Scaffold(
-        backgroundColor: HistoriaClinicaConstants.backgroundColor,
-        appBar: _buildAppBar(context),
-        body: const Center(child: Text("No logueado", style: TextStyle(color: Colors.black54))),
-      );
+class _HistoriaClinicaScreenState extends State<HistoriaClinicaScreen> {
+  late Future<DocumentSnapshot<Map<String, dynamic>>> _userDataFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _initUserData();
+  }
+
+  void _initUserData() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _userDataFuture = FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get();
+    } else {
+      // FORCE MOCK DATA FALLBACK: Trigger the 'permission-denied' error handler in FutureBuilder
+      _userDataFuture = Future.error('permission-denied');
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Auth check bypassed for testing
+    // final user = FirebaseAuth.instance.currentUser;
+    // if (user == null) return ...
 
     return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: FirebaseFirestore.instance.collection('usuarios').doc(user.uid).get(),
+      future: _userDataFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const TechLoadingScreen(); // CAP 1 FIX: Pantalla de carga tech mejorada
+          // CAP 1 FIX: Usar loader simple para descartar errores de layout en TechLoadingScreen
+          return const Scaffold(
+            backgroundColor: HistoryRepository.backgroundColor,
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         if (snapshot.hasError) {
@@ -4232,18 +3372,19 @@ class HistoriaClinicaScreen extends StatelessWidget {
               'medicamentos': 'Losartán 50mg + Enalapril 10mg',
             };
             
-            final data = HistoriaClinicaData.fromMap(mockData);
+            final data = MedicalHistoryModel.fromMap(mockData);
             return _buildHistoriaClinicaContent(context, data);
           }
           
           return Scaffold(
-            backgroundColor: HistoriaClinicaConstants.backgroundColor,
+            backgroundColor: HistoryRepository.backgroundColor,
             appBar: _buildAppBar(context),
             body: ErrorCard(
               message: "Error al cargar los datos: ${snapshot.error}",
               onRetry: () {
-                // Forzar rebuild del widget
-                (context as Element).markNeedsBuild();
+                setState(() {
+                  _initUserData();
+                });
               },
             ),
           );
@@ -4262,11 +3403,11 @@ class HistoriaClinicaScreen extends StatelessWidget {
             'medicamentos': 'Losartán 50mg + Enalapril 10mg',
           };
           
-          final data = HistoriaClinicaData.fromMap(mockData);
+          final data = MedicalHistoryModel.fromMap(mockData);
           return _buildHistoriaClinicaContent(context, data);
         }
 
-        final data = HistoriaClinicaData.fromMap(snapshot.data!.data()!);
+        final data = MedicalHistoryModel.fromMap(snapshot.data!.data()!);
         return _buildHistoriaClinicaContent(context, data);
       },
     );
@@ -4280,14 +3421,14 @@ class HistoriaClinicaScreen extends StatelessWidget {
       title: const Text(
         'Historia clínica',
         style: TextStyle(
-          color: HistoriaClinicaConstants.primaryColor,
+          color: HistoryRepository.primaryColor,
           fontWeight: FontWeight.bold,
         ),
       ),
       actions: [
         IconButton(
           icon: const Icon(Icons.edit),
-          color: HistoriaClinicaConstants.primaryColor,
+          color: HistoryRepository.primaryColor,
           onPressed: () {
             Navigator.push(
               context,
@@ -4296,13 +3437,13 @@ class HistoriaClinicaScreen extends StatelessWidget {
           },
         ),
       ],
-      iconTheme: const IconThemeData(color: HistoriaClinicaConstants.primaryColor),
+      iconTheme: const IconThemeData(color: HistoryRepository.primaryColor),
     );
   }
 
   Widget _buildEmptyDataScreen(BuildContext context) {
     return Scaffold(
-      backgroundColor: HistoriaClinicaConstants.backgroundColor,
+      backgroundColor: HistoryRepository.backgroundColor,
       appBar: _buildAppBar(context),
       body: Center(
         child: Card(
@@ -4316,12 +3457,12 @@ class HistoriaClinicaScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: HistoriaClinicaConstants.primaryColor.withOpacity(0.1),
+                    color: HistoryRepository.primaryColor.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.person_add,
-                    color: HistoriaClinicaConstants.primaryColor,
+                    color: HistoryRepository.primaryColor,
                     size: 48,
                   ),
                 ),
@@ -4329,7 +3470,7 @@ class HistoriaClinicaScreen extends StatelessWidget {
                 const Text(
                   "Completá tus datos",
                   style: TextStyle(
-                    color: HistoriaClinicaConstants.darkBlue,
+                    color: HistoryRepository.darkBlue,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
@@ -4338,7 +3479,7 @@ class HistoriaClinicaScreen extends StatelessWidget {
                 const Text(
                   "Para acceder a tu historia clínica completa, necesitamos que completes tu información personal.",
                   style: TextStyle(
-                    color: HistoriaClinicaConstants.mediumGray,
+                    color: HistoryRepository.mediumGray,
                     fontSize: 16,
                   ),
                   textAlign: TextAlign.center,
@@ -4354,7 +3495,7 @@ class HistoriaClinicaScreen extends StatelessWidget {
                   icon: const Icon(Icons.edit),
                   label: const Text("Completar perfil"),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: HistoriaClinicaConstants.primaryColor,
+                    backgroundColor: HistoryRepository.primaryColor,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     shape: RoundedRectangleBorder(
@@ -4370,273 +3511,269 @@ class HistoriaClinicaScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHistoriaClinicaContent(BuildContext context, HistoriaClinicaData data) {
+  Widget _buildHistoriaClinicaContent(BuildContext context, MedicalHistoryModel data) {
     return Scaffold(
-      backgroundColor: HistoriaClinicaConstants.backgroundColor,
-      appBar: _buildAppBar(context),
+      backgroundColor: HistoryRepository.backgroundColor,
+      // No AppBar - using visual header
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async {
-            // Simular refresh
-            await Future.delayed(const Duration(seconds: 1));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Información actualizada")),
-            );
-          },
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Banner de ilustración
-                _buildIllustrationBanner(),
-                
-                const SizedBox(height: 16),
-
-                // NUEVO DISEÑO LEGIBLE - Identificación del paciente
-                Card(
-                  elevation: 3, // Ligeramente más elevado
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const MiPerfilScreen()),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF2376F6).withOpacity(0.3), width: 1.5), // Borde más visible
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF2376F6).withOpacity(0.08), // Sombra muy sutil
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
+        child: Container( // Wrap in Container for background color consistency if needed
+           color: const Color(0xFFF8FCFF),
+           child: Column(
+             children: [
+               Stack(
+                 children: [
+                   const StandardPageHeader(
+                      title: "Historia clínica",
+                      subtitle: "Tu salud al día",
+                      imagePath: "assets/images/ilustracion_historia_clinica.png",
+                      isLarge: false,
+                      imageScale: 0.85,
+                   ),
+                   Positioned(
+                     top: 40, // Match typical AppBar height
+                     right: 16,
+                     child: GestureDetector(
+                       onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const MiPerfilScreen()),
+                          );
+                       },
+                       child: Container(
+                         padding: const EdgeInsets.all(8),
+                         decoration: BoxDecoration(
+                           color: Colors.white.withOpacity(0.9),
+                           shape: BoxShape.circle,
+                           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+                         ),
+                         child: const Icon(Icons.edit, color: HistoryRepository.primaryColor, size: 20),
+                       ),
+                     ),
+                   )
+                 ],
+               ),
+               
+               Expanded(
+                 child: RefreshIndicator(
+                  onRefresh: () async {
+                    // Simular refresh
+                    await Future.delayed(const Duration(seconds: 1));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Información actualizada")),
+                    );
+                  },
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24), // 18 -> 24 (Platinum)
+                    children: [
+                        // Identificación del paciente (Keep as is, user mentioned Cap2 banner which is now fixed by Header)
+                        BouncingCard(
+                          onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const MiPerfilScreen()),
+                              );
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 16), // 12 -> 16 (8pt grid)
+                            padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF2376F6).withOpacity(0.12), // Ligeramente más intenso
-                              borderRadius: BorderRadius.circular(12),
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24), // 16 -> 24 (Platinum)
+                              border: Border.all(color: const Color(0xFF2376F6).withOpacity(0.1)), // Soft border
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF2376F6).withOpacity(0.08),
+                                  blurRadius: 24, // 8 -> 24 (Soft shadow)
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
                             ),
-                            child: const Icon(
-                              Icons.verified_user_rounded,
-                              color: Color(0xFF2376F6),
-                              size: 24,
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2376F6).withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(16), // 12 -> 16
+                                  ),
+                                  child: const Icon(
+                                    Icons.verified_user_rounded,
+                                    color: Color(0xFF2376F6),
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Flexible(
+                                            child: Text(
+                                              "Identificación del paciente",
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                                color: Color(0xFF193A72),
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // 2->4
+                                            decoration: BoxDecoration(
+                                              color: Colors.green.withOpacity(0.12),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(color: Colors.green.withOpacity(0.2)),
+                                            ),
+                                            child: const Text(
+                                              'Verificado',
+                                              style: TextStyle(
+                                                color: Colors.green,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8), // 4->8
+                                      Text(
+                                        "DNI: ${data.dni} • ${data.centro} • ${data.edad} años",
+                                        style: const TextStyle(
+                                          color: Color(0xFF42506A),
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Ícono de navegación
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: Color(0xFF2376F6),
+                                  size: 20,
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                        ),
+        
+                        const SizedBox(height: 16), 
+        
+                        // Próxima cita médica  
+                        BouncingCard(
+                          onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const SacarTurnoScreen()),
+                              );
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: const Color(0xFF4FE1F3).withOpacity(0.3), width: 1),
+                              boxShadow: [
+                                 BoxShadow(
+                                    color: const Color(0xFF4FE1F3).withOpacity(0.08), 
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 8),
+                                 ),
+                              ]
+                            ),
+                            child: Row(
                               children: [
-                                Row(
-                                  children: [
-                                    const Flexible(
-                                      child: Text(
-                                        "Identificación del paciente",
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF4FE1F3).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: const Icon(
+                                    Icons.event_available_rounded,
+                                    color: Color(0xFF4FE1F3),
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        "Próxima cita médica",
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
                                           color: Color(0xFF193A72),
                                         ),
-                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.green.withOpacity(0.12),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.green.withOpacity(0.2)),
-                                      ),
-                                      child: const Text(
-                                        'Verificado',
-                                        style: TextStyle(
-                                          color: Colors.green,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        data.proximaCita,
+                                        style: const TextStyle(
+                                          color: Color(0xFF42506A),
+                                          fontSize: 14,
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  "DNI: ${data.dni} • ${data.centro} • ${data.edad} años",
-                                  style: const TextStyle(
-                                    color: Color(0xFF42506A),
-                                    fontSize: 14,
+                                    ],
                                   ),
+                                ),
+                                // Agregar ícono de navegación
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: Color(0xFF4FE1F3),
+                                  size: 20,
                                 ),
                               ],
                             ),
                           ),
-                          // Ícono de navegación
-                          const Icon(
-                            Icons.chevron_right,
-                            color: Color(0xFF2376F6),
-                            size: 20,
-                          ),
-                        ],
-                      ),
+                        ),
+        
+                        // Información de actualización
+                        _buildUpdateInfoBanner(data.fechaActualizacion),
+        
+                        const SizedBox(height: 20),
+        
+                        // Grid de secciones principales
+                        _buildMainSectionsGrid(context, data),
+        
+                        const SizedBox(height: 20),
+        
+                        // Secciones adicionales
+                        _buildAdditionalSections(context),
+        
+                        const SizedBox(height: 20),
+        
+                        // Footer con información del centro
+                        _buildFooterInfo(),
+                        
+                        const SizedBox(height: 30), // Espacio final extra
+                      ],
                     ),
                   ),
-                ),
-
-                const SizedBox(height: 16), // Aumentado de 12 a 16 para más separación
-
-                // NUEVO DISEÑO LEGIBLE - Próxima cita médica  
-                Card(
-                  elevation: 2,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const SacarTurnoScreen()),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF4FE1F3).withOpacity(0.3), width: 1),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF4FE1F3).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.event_available_rounded,
-                              color: Color(0xFF4FE1F3),
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  "Próxima cita médica",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: Color(0xFF193A72),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  data.proximaCita,
-                                  style: const TextStyle(
-                                    color: Color(0xFF42506A),
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Agregar ícono de navegación
-                          const Icon(
-                            Icons.chevron_right,
-                            color: Color(0xFF4FE1F3),
-                            size: 20,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Información de actualización
-                _buildUpdateInfoBanner(data.fechaActualizacion),
-
-                const SizedBox(height: 20),
-
-                // Grid de secciones principales
-                _buildMainSectionsGrid(context, data),
-
-                const SizedBox(height: 20),
-
-                // Secciones adicionales
-                _buildAdditionalSections(context),
-
-                const SizedBox(height: 20),
-
-                // Footer con información del centro
-                _buildFooterInfo(),
-              ],
-            ),
-          ),
+               ),
+             ],
+           ),
         ),
       ),
     );
   }
 
-  Widget _buildIllustrationBanner() {
-    return Container(
-      height: 140,
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Image.asset(
-        HistoriaClinicaConstants.defaultIllustracion,
-        fit: BoxFit.cover,
-        alignment: Alignment.center,
-        errorBuilder: (_, __, ___) => Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                HistoriaClinicaConstants.primaryColor.withOpacity(0.1),
-                HistoriaClinicaConstants.secondaryColor.withOpacity(0.1),
-              ],
-            ),
-          ),
-          child: const Center(
-            child: Icon(
-              Icons.medical_services,
-              size: 48,
-              color: HistoriaClinicaConstants.primaryColor,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+
+
 
   Widget _buildUpdateInfoBanner(String fechaActualizacion) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      width: double.infinity, // FIX: Ensure constrained width for Spacer
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.7),
         borderRadius: BorderRadius.circular(12),
@@ -4677,8 +3814,15 @@ class HistoriaClinicaScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMainSectionsGrid(BuildContext context, HistoriaClinicaData data) {
+  Widget _buildMainSectionsGrid(BuildContext context, MedicalHistoryModel data) {
+    // CAP 5 FIX: Calculate explicit width to avoid Expanded layout errors
+    final screenWidth = MediaQuery.of(context).size.width;
+    final padding = 36.0; // 18 * 2
+    final gap = 16.0;
+    final cardWidth = (screenWidth - padding - gap) / 2;
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Primera fila - Resumen destacado
         _CardAcceso(
@@ -4690,15 +3834,17 @@ class HistoriaClinicaScreen extends StatelessWidget {
             MaterialPageRoute(builder: (_) => ResumenDetailScreen(data: data)),
           ),
           tag: "Ver detalle",
-          bgColor: HistoriaClinicaConstants.cardColor,
-          iconColor: HistoriaClinicaConstants.primaryColor,
+          bgColor: HistoryRepository.cardColor,
+          iconColor: HistoryRepository.primaryColor,
           gradient: true,
         ),
 
         // Segunda fila - Diagnóstico y Medicamentos
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
+             SizedBox(
+              width: cardWidth,
               child: _CardAcceso(
                 icon: Icons.assignment_turned_in_rounded,
                 title: "Diagnósticos",
@@ -4707,14 +3853,14 @@ class HistoriaClinicaScreen extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) => DiagnosticoDetailScreen(
-                      diagnostico: HistoriaClinicaConstants.diagnosticosMock.first,
+                      diagnostico: HistoryRepository.diagnosticosMock.first,
                     ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
+            SizedBox(
+              width: cardWidth,
               child: _CardAcceso(
                 icon: Icons.medication_rounded,
                 title: "Medicamentos",
@@ -4730,8 +3876,10 @@ class HistoriaClinicaScreen extends StatelessWidget {
 
         // Tercera fila - Turnos y Signos Vitales
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
+            SizedBox(
+              width: cardWidth,
               child: _CardAcceso(
                 icon: Icons.calendar_today_rounded,
                 title: "Turnos",
@@ -4742,8 +3890,8 @@ class HistoriaClinicaScreen extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
+            SizedBox(
+              width: cardWidth,
               child: _CardAcceso(
                 icon: Icons.favorite_rounded,
                 title: "Signos vitales",
@@ -4762,6 +3910,15 @@ class HistoriaClinicaScreen extends StatelessWidget {
   }
 
   Widget _buildAdditionalSections(BuildContext context) {
+    // FIX: Calculate button width explicitly
+    final screenWidth = MediaQuery.of(context).size.width;
+    final listViewPadding = 36.0;
+    final cardPadding = 40.0;
+    final gap = 24.0;
+    // Ancho disponible real = Screen - ListViewPadding - CardMargin(default 4x2=8) - CardPadding
+    // Simplificado: Screen - 36 - 40 - 24 (gap)
+    final buttonWidth = (screenWidth - listViewPadding - cardPadding - gap - 8) / 2;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -4775,15 +3932,17 @@ class HistoriaClinicaScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: HistoriaClinicaConstants.darkBlue,
+                color: HistoryRepository.darkBlue,
               ),
             ),
             
             const SizedBox(height: 16),
             
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
+                SizedBox(
+                  width: buttonWidth,
                   child: _buildActionButton(
                     "Exportar PDF",
                     Icons.picture_as_pdf,
@@ -4795,8 +3954,8 @@ class HistoriaClinicaScreen extends StatelessWidget {
                     },
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
+                SizedBox(
+                  width: buttonWidth, // Usando SizedBox en lugar de Expanded
                   child: _buildActionButton(
                     "Compartir",
                     Icons.share,
@@ -4814,8 +3973,10 @@ class HistoriaClinicaScreen extends StatelessWidget {
             const SizedBox(height: 12),
             
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
+                SizedBox(
+                  width: buttonWidth,
                   child: _buildActionButton(
                     "Solicitar estudios",
                     Icons.science,
@@ -4828,8 +3989,8 @@ class HistoriaClinicaScreen extends StatelessWidget {
                     },
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
+                SizedBox(
+                  width: buttonWidth,
                   child: _buildActionButton(
                     "Emergencia",
                     Icons.emergency,
@@ -4917,6 +4078,7 @@ class HistoriaClinicaScreen extends StatelessWidget {
 
   Widget _buildFooterInfo() {
     return Container(
+      width: double.infinity, // FIX: Ensure explicit width
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -4930,12 +4092,12 @@ class HistoriaClinicaScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: HistoriaClinicaConstants.primaryColor.withOpacity(0.1),
+                  color: HistoryRepository.primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
                   Icons.local_hospital,
-                  color: HistoriaClinicaConstants.primaryColor,
+                  color: HistoryRepository.primaryColor,
                   size: 20,
                 ),
               ),
@@ -4945,16 +4107,16 @@ class HistoriaClinicaScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Instituto Ángel H. Roffo",
+                      "Centro Médico",
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: HistoriaClinicaConstants.darkBlue,
+                        color: HistoryRepository.darkBlue,
                       ),
                     ),
                     Text(
                       "Centro de excelencia en medicina",
                       style: TextStyle(
-                        color: HistoriaClinicaConstants.mediumGray,
+                        color: HistoryRepository.mediumGray,
                         fontSize: 12,
                       ),
                     ),
@@ -4990,7 +4152,7 @@ class HistoriaClinicaScreen extends StatelessWidget {
           children: [
             Icon(
               icon,
-              color: HistoriaClinicaConstants.primaryColor,
+              color: HistoryRepository.primaryColor,
               size: 20,
             ),
             const SizedBox(height: 4),
@@ -4998,7 +4160,7 @@ class HistoriaClinicaScreen extends StatelessWidget {
               label,
               style: const TextStyle(
                 fontSize: 11,
-                color: HistoriaClinicaConstants.mediumGray,
+                color: HistoryRepository.mediumGray,
               ),
             ),
           ],
@@ -5033,98 +4195,100 @@ class _CardAcceso extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: gradient ? null : (bgColor ?? Colors.white),
-      elevation: 3,
-      margin: const EdgeInsets.only(bottom: 10), // CAP 4 FIX: Reducido de 12 a 10
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return BouncingCard(
+      onTap: onTap ?? () {},
       child: Container(
-        decoration: gradient
-            ? BoxDecoration(
-                gradient: LinearGradient(
+        margin: const EdgeInsets.only(bottom: 16), // 10 -> 16 (8pt grid)
+        decoration: BoxDecoration(
+          color: gradient ? null : (bgColor ?? Colors.white),
+          borderRadius: BorderRadius.circular(24), // 16 -> 24 (Platinum)
+          gradient: gradient
+              ? LinearGradient(
                   colors: [
-                    HistoriaClinicaConstants.primaryColor.withOpacity(0.1),
-                    HistoriaClinicaConstants.secondaryColor.withOpacity(0.05),
+                    HistoryRepository.primaryColor.withOpacity(0.1),
+                    HistoryRepository.secondaryColor.withOpacity(0.05),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
+                )
+              : null,
+          boxShadow: [
+             BoxShadow(
+               color: (iconColor ?? HistoryRepository.primaryColor).withOpacity(0.08), 
+               blurRadius: 24, 
+               offset: const Offset(0, 8)
+             )
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16), // 14 -> 16
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12), // 10 -> 12
+                decoration: BoxDecoration(
+                  color: (iconColor ?? HistoryRepository.primaryColor).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(16), // 12 -> 16
                 ),
-                borderRadius: BorderRadius.circular(16),
-              )
-            : null,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14), // CAP 4 FIX: Reducido de 18 a 14
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10), // CAP 4 FIX: Reducido de 12 a 10
-                  decoration: BoxDecoration(
-                    color: (iconColor ?? HistoriaClinicaConstants.primaryColor).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: iconColor ?? HistoriaClinicaConstants.primaryColor,
-                    size: 24, // CAP 4 FIX: Reducido de 28 a 24
-                  ),
+                child: Icon(
+                  icon,
+                  color: iconColor ?? HistoryRepository.primaryColor,
+                  size: 24, 
                 ),
-                const SizedBox(width: 12), // CAP 4 FIX: Reducido de 16 a 12
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14, // CAP 4 FIX: Reducido de 15 a 14
-                          color: HistoriaClinicaConstants.darkBlue,
+              ),
+              const SizedBox(width: 16), // 12 -> 16
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: HistoryRepository.darkBlue,
+                      ),
+                    ),
+                    const SizedBox(height: 8), // 4 -> 8
+                    Text(
+                      content,
+                      style: const TextStyle(
+                        color: HistoryRepository.mediumGray,
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (tag != null) ...[
+                      const SizedBox(height: 8), // 6 -> 8
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), 
+                        decoration: BoxDecoration(
+                          color: (iconColor ?? HistoryRepository.primaryColor).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          tag!,
+                          style: TextStyle(
+                            color: iconColor ?? HistoryRepository.primaryColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11, 
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 4), // CAP 4 FIX: Reducido de 6 a 4
-                      Text(
-                        content,
-                        style: const TextStyle(
-                          color: HistoriaClinicaConstants.mediumGray,
-                          fontSize: 12, // CAP 4 FIX: Reducido de 13 a 12
-                          height: 1.3,
-                        ),
-                        maxLines: 2, // CAP 4 FIX: Reducido de 3 a 2
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (tag != null) ...[
-                        const SizedBox(height: 6), // CAP 4 FIX: Reducido de 8 a 6
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), // CAP 4 FIX: Reducido
-                          decoration: BoxDecoration(
-                            color: (iconColor ?? HistoriaClinicaConstants.primaryColor).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            tag!,
-                            style: TextStyle(
-                              color: iconColor ?? HistoriaClinicaConstants.primaryColor,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 11, // CAP 4 FIX: Reducido de 12 a 11
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 6), // CAP 4 FIX: Reducido de 8 a 6
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: HistoriaClinicaConstants.lightGray,
-                  size: 24, // CAP 4 FIX: Reducido de 28 a 24
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8), 
+              Icon(
+                Icons.chevron_right_rounded,
+                color: HistoryRepository.lightGray,
+                size: 24,
+              ),
+            ],
           ),
         ),
       ),
