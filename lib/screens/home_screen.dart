@@ -321,7 +321,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             await Future.delayed(const Duration(milliseconds: 1000));
             await FirebaseAuth.instance.signOut();
             if (mounted) {
-              Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+              // Navigate to AuthWrapper (Home) to trigger Intro Logic
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const AuthWrapper()),
+                (route) => false,
+              );
             }
           }
         ),

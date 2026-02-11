@@ -31,6 +31,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
              _user = null;
              _role = null;
              _isLoading = false;
+             // Reset Intro state on Logout to show it again
+             _showLogin = false; 
            });
         }
       } else {

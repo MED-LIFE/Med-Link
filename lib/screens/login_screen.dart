@@ -438,7 +438,7 @@ class _LoginScreenState extends State<LoginScreen>
                              padding: const EdgeInsets.only(bottom: 20),
                              child: Column(
                                children: [
-                                  Text("v1.0.6 - Zanoo Platinum", style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11)),
+                                  Text("v1.1.0 (Intro) - Zanoo Platinum", style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11)),
                                   const SizedBox(height: 6),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
