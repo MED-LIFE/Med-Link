@@ -522,5 +522,23 @@ class _LoginScreenState extends State<LoginScreen>
       ),
     );
   }
+  Future<void> _handleDevLogin(String email, String role, Function(BuildContext) cb, {required String password}) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      // Role and callback are ignored as AuthWrapper handles logic
+      final user = await _authService.signInDevUser(email, password);
+      if (user == null) {
+        if (mounted) setState(() => _error = "Credenciales incorrectas.");
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 }
 
