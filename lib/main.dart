@@ -18,7 +18,9 @@ import 'screens/admin/admin_turnos_screen.dart';
 import 'screens/common/patient_intake_wizard_screen.dart';
 
 import 'screens/admin/admin_patient_import_screen.dart';
+import 'screens/admin/admin_patient_import_screen.dart';
 import 'screens/common/patient_intake_options_screen.dart';
+import 'widgets/auth_wrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,20 +68,7 @@ class MyApp extends StatelessWidget {
           ),
         );
       },
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-          if (snapshot.hasData) {
-            return const HomeScreen();
-          }
-          return const LoginScreen();
-        },
-      ),
+      home: const AuthWrapper(),
       routes: {
         '/home': (_) => const HomeScreen(),
         '/login': (_) => const LoginScreen(),

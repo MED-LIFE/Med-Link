@@ -137,7 +137,7 @@ class _LoginScreenState extends State<LoginScreen>
       if (mounted) {
          setState(() => _loading = false);
          if (user != null) {
-           onNavigate(context);
+           // AuthWrapper handles routing
          } else {
            setState(() => _error = "No se pudo iniciar sesión. Verifique consola.");
          }
@@ -412,7 +412,7 @@ class _LoginScreenState extends State<LoginScreen>
                                     SizedBox(
                                       width: double.infinity,
                                       child: ElevatedButton(
-                                        onPressed: () => _showProfessionalLoginDialog(context, 'paciente', 'paciente@zanoo.com'),
+                                        onPressed: () => _showEmailLoginDialog(context),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: const Color(0xFFE3F2FD),
                                           foregroundColor: const Color(0xFF1565C0),
@@ -426,41 +426,6 @@ class _LoginScreenState extends State<LoginScreen>
                                       ),
                                     ),
 
-                                    const SizedBox(height: 32),
-                                    Row(
-                                      children: [
-                                        Expanded(child: Divider(color: Colors.grey[300])),
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                                          child: Text("Acceso Profesional", style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.bold)),
-                                        ),
-                                        Expanded(child: Divider(color: Colors.grey[300])),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 24),
-                                    
-                                    // ACCESO PROFESIONAL (Fixed Buttons)
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: _ProLoginButton(
-                                            label: "Médico",
-                                            icon: Icons.medical_services_rounded,
-                                            color: const Color(0xFF2376F6), // Brand Blue
-                                            onTap: () => _showProfessionalLoginDialog(context, 'medico', 'medico@zanoo.com'),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: _ProLoginButton(
-                                            label: "Admin",
-                                            icon: Icons.admin_panel_settings_rounded,
-                                            color: const Color(0xFF193A72), // Dark Blue
-                                            onTap: () => _showProfessionalLoginDialog(context, 'admin', 'admin@zanoo.com'),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
                                   ],
                                 ),
                               ),
@@ -499,16 +464,15 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  void _showProfessionalLoginDialog(BuildContext context, String role, String defaultEmail) {
-    final emailCtrl = TextEditingController(text: defaultEmail);
+  void _showEmailLoginDialog(BuildContext context) {
+    final emailCtrl = TextEditingController(text: "paciente@zanoo.com");
     final passCtrl = TextEditingController(text: "Zanoo123!");
-    String title = role == 'paciente' ? "Ingresar con Email" : "Acceso ${role.toUpperCase()}";
     
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Ingresar con Email", style: TextStyle(fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -547,14 +511,9 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             onPressed: () {
               Navigator.pop(ctx);
-              _handleDevLogin(emailCtrl.text, role, (c) {
-                 if (role == 'medico') {
-                   Navigator.pushReplacement(c, MaterialPageRoute(builder: (_) => const HomeMedicoScreen()));
-                 } else if (role == 'admin') {
-                   Navigator.pushReplacementNamed(c, '/home_admin');
-                 } else {
-                   Navigator.pushReplacementNamed(c, '/home'); // Patient
-                 }
+              // Role param is ignored since AuthWrapper detects it. We just pass 'user' for compatibility if needed.
+              _handleDevLogin(emailCtrl.text, 'user', (c) {
+                 // No manual nav
               }, password: passCtrl.text);
             },
             child: const Text("Ingresar"),
@@ -565,49 +524,3 @@ class _LoginScreenState extends State<LoginScreen>
   }
 }
 
-class _ProLoginButton extends StatelessWidget {
-  final String label;
-  final Color color;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _ProLoginButton({
-    required this.label,
-    required this.color,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-        decoration: BoxDecoration(
-          color: Colors.white, 
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.withOpacity(0.2)),
-          boxShadow: [
-             BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-          ]
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(height: 8),
-            Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey[800])),
-          ],
-        ),
-      ),
-    );
-  }
-}
