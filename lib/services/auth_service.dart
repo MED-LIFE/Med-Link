@@ -54,8 +54,8 @@ class AuthService {
           print("Error creating dev user: $createError");
           return null;
         }
-      } else if (e.code == 'wrong-password') {
-        print("Wrong password for $email. Creating a fresh dev account to ensure access...");
+      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        print("Login failed (${e.code}). Creating a fresh dev account to ensure access...");
         // Fallback: Create a new random user for this role to guarantee entry
         final timestamp = DateTime.now().millisecondsSinceEpoch % 10000;
         final prefix = email.split('@')[0];

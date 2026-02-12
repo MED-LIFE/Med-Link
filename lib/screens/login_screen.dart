@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
@@ -153,6 +154,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _checkBiometrics() async {
+    if (kIsWeb) return; // Biometrics not supported on web in this implementation
     try {
       bool canCheck = await _localAuth.canCheckBiometrics;
       bool isDeviceSupported = await _localAuth.isDeviceSupported();
