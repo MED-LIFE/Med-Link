@@ -20,6 +20,7 @@ import 'farmacias_screen.dart';
 import 'mis_turnos_screen.dart';
 import '../widgets/patient/home_widgets.dart';
 import '../widgets/main_drawer.dart';
+import '../widgets/auth_wrapper.dart';
 import '../widgets/common/bouncing_card.dart';
 import 'detalle_estudio_screen.dart';
 
