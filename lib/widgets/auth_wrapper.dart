@@ -43,6 +43,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _fetchUserRole(User user) async {
     try {
+      // 0. PRIORITY OVERRIDE for Dev/Demo Accounts
+      // This ensures 'admin@zanoo.com' ALWAYS gets admin role, regardless of what Firestore says.
+      if (user.email != null) {
+         if (user.email!.contains("admin")) {
+           if (mounted) setState(() { _user = user; _role = 'admin'; _isLoading = false; });
+           return;
+         }
+         if (user.email!.contains("medico")) {
+           if (mounted) setState(() { _user = user; _role = 'medico'; _isLoading = false; });
+           return;
+         }
+      }
+
       // 1. Check 'users' collection (Patients/Admins/Medicos might all be here with a 'role' field)
       //    OR check specific collections if your DB is structured that way.
       //    Assuming a unified 'users' collection or checking 'role' field.
