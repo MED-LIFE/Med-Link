@@ -46,11 +46,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
       // 0. PRIORITY OVERRIDE for Dev/Demo Accounts
       // This ensures 'admin@zanoo.com' ALWAYS gets admin role, regardless of what Firestore says.
       if (user.email != null) {
-         if (user.email!.contains("admin")) {
+         final emailLower = user.email!.toLowerCase();
+         if (emailLower.contains("admin")) {
            if (mounted) setState(() { _user = user; _role = 'admin'; _isLoading = false; });
            return;
          }
-         if (user.email!.contains("medico")) {
+         if (emailLower.contains("medico")) {
            if (mounted) setState(() { _user = user; _role = 'medico'; _isLoading = false; });
            return;
          }
