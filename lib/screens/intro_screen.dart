@@ -35,6 +35,8 @@ class _IntroScreenState extends State<IntroScreen> {
     },
   ];
 
+  bool _acceptedTerms = false;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -57,31 +59,57 @@ class _IntroScreenState extends State<IntroScreen> {
           
           // Bottom Controls
           Positioned(
-            bottom: 40,
+            bottom: 30, // Lifted slightly
             left: 24,
             right: 24,
             child: Column(
               children: [
-                // Page Indicator
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(
-                    _slides.length,
-                    (index) => AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      height: 8,
-                      width: _currentPage == index ? 24 : 8,
-                      decoration: BoxDecoration(
-                        color: _currentPage == index
-                            ? const Color(0xFF2376F6)
-                            : Colors.grey[300],
-                        borderRadius: BorderRadius.circular(4),
+                // TERMS CHECKBOX (Only on last slide)
+                if (_currentPage == _slides.length - 1)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: _acceptedTerms, 
+                          activeColor: const Color(0xFF2376F6),
+                          onChanged: (val) => setState(() => _acceptedTerms = val ?? false)
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _acceptedTerms = !_acceptedTerms),
+                            child: const Text(
+                              "Acepto los Términos y Condiciones y la Política de Privacidad de Datos.",
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Page Indicator (Hidden if on last page to make room, or keep it?)
+                if (_currentPage != _slides.length - 1)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(
+                      _slides.length,
+                      (index) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        height: 8,
+                        width: _currentPage == index ? 24 : 8,
+                        decoration: BoxDecoration(
+                          color: _currentPage == index
+                              ? const Color(0xFF2376F6)
+                              : Colors.grey[300],
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 32),
+                
+                SizedBox(height: _currentPage == _slides.length - 1 ? 0 : 32),
                 
                 // Button
                 SizedBox(
@@ -95,11 +123,19 @@ class _IntroScreenState extends State<IntroScreen> {
                           curve: Curves.easeInOut,
                         );
                       } else {
-                        widget.onFinish();
+                         if (_acceptedTerms) {
+                           widget.onFinish();
+                         } else {
+                           ScaffoldMessenger.of(context).showSnackBar(
+                             const SnackBar(content: Text("Debés aceptar los términos para continuar."))
+                           );
+                         }
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF083866),
+                      backgroundColor: (_currentPage == _slides.length - 1 && !_acceptedTerms) 
+                          ? Colors.grey 
+                          : const Color(0xFF083866),
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(

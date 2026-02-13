@@ -73,25 +73,34 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // AGENDA (New Collection for Zanoo)
+    // AGENDA (Write: Doctors/Admins only)
     match /agenda/{itemId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isDoctor() || isAdmin();
     }
     
-    // FARMACIAS (Public read, Authenticated write for seed)
+    // FARMACIAS (Public read, Admin write)
     match /farmacias/{itemId} {
       allow read;
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
     
-    // RECETAS
+    // RECETAS (Read: Owner/Doc/Admin, Write: Doc/Admin)
     match /recetas/{itemId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated() && (resource.data.pacienteId == request.auth.uid || isDoctor() || isAdmin());
+      allow write: if isDoctor() || isAdmin();
     }
     
-    // ORDENES MEDICAS
+    // ORDENES MEDICAS (Read: Owner/Doc/Admin, Write: Doc/Admin)
     match /ordenes_medicas/{itemId} {
-       allow read, write: if isAuthenticated();
+       allow read: if isAuthenticated() && (resource.data.pacienteId == request.auth.uid || isDoctor() || isAdmin());
+       allow write: if isDoctor() || isAdmin();
+    }
+
+    // AUDIT LOGS (Write only, No Read for anyone except strictly Admin via backend if needed)
+    match /audit_logs/{logId} {
+      allow create: if isAuthenticated(); // Allow users to log their actions
+      allow read, update, delete: if false; // Immutable logs
     }
 
     // Default Deny

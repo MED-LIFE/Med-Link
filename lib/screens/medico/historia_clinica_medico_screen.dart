@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../constants/medico_constants.dart';
 import '../../repositories/history_repository.dart';
 import '../../widgets/patient/standard_header.dart';
+import '../../services/audit_service.dart';
 
 class HistoriaClinicaMedicoScreen extends StatefulWidget {
   final Map<String, dynamic> patient;
@@ -13,12 +14,13 @@ class HistoriaClinicaMedicoScreen extends StatefulWidget {
   State<HistoriaClinicaMedicoScreen> createState() => _HistoriaClinicaMedicoScreenState();
 }
 
-class _HistoriaClinicaMedicoScreenState extends State<HistoriaClinicaMedicoScreen> {
+class _HistoriaClinicaMedicoScreenState extends State<HistoriaClinicaMedicoScreen> with SingleTickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   final HistoryRepository _repository = HistoryRepository();
   bool _isFabExtended = true;
   
   late String _dni;
+  final AuditService _auditService = AuditService();
 
   @override
   void initState() {
