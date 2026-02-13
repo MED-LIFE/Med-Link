@@ -36,6 +36,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
            });
         }
       } else {
+        if (mounted) {
+           setState(() => _isLoading = true);
+        }
         _fetchUserRole(user);
       }
     });
